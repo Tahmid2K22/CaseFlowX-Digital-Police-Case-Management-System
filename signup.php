@@ -1,23 +1,30 @@
 <?php
-// register.php - Administrative User Registration Portal
+// signup.php - Public User Registration Portal
 require_once __DIR__ . '/auth.php';
 
-// RBAC Check: Restrict to Admin only
-check_access(['Admin']);
+// Redirect if already logged in
+if (is_logged_in()) {
+    if ($_SESSION['role'] === 'Admin') {
+        header("Location: admin_users.php");
+        exit;
+    } else {
+        header("Location: unauthorized.php");
+        exit;
+    }
+}
 
 $lang = $_SESSION['lang'] ?? 'en';
 
 $t = [
     'en' => [
-        'title' => 'Register User Account — Admin Panel',
-        'heading' => 'Register User Account',
-        'subheading' => 'Create a new security profile, assign credentials, and set system access permissions.',
+        'title' => 'Register User Account — Police Portal',
+        'heading' => 'Create Account',
+        'subheading' => 'Register a new security profile, credentials, and set system access permissions.',
         'btn_cancel' => 'Cancel',
         'btn_next' => 'Next Step',
         'btn_prev' => 'Previous',
-        'btn_submit' => 'Register User',
-        'back_dashboard' => 'Back to User Directory',
-        'logged_as' => 'Logged in as',
+        'btn_submit' => 'Register Account',
+        'back_login' => 'Back to Login',
         'copyright' => '2025 CaseFlowX — Case Management Platform',
         
         // Steps
@@ -53,15 +60,14 @@ $t = [
         'select_division' => 'Select division',
     ],
     'bn' => [
-        'title' => 'ব্যবহারকারী নিবন্ধন — অ্যাডমিন প্যানেল',
-        'heading' => 'ব্যবহারকারী অ্যাকাউন্ট নিবন্ধন',
+        'title' => 'ব্যবহারকারী নিবন্ধন — পুলিশ পোর্টাল',
+        'heading' => 'অ্যাকাউন্ট তৈরি করুন',
         'subheading' => 'একটি নতুন সুরক্ষা প্রোফাইল তৈরি করুন, ক্রেডেনশিয়াল সেট করুন এবং সিস্টেমের প্রবেশাধিকার নির্ধারণ করুন।',
         'btn_cancel' => 'বাতিল',
         'btn_next' => 'পরবর্তী ধাপ',
         'btn_prev' => 'পূর্ববর্তী',
         'btn_submit' => 'নিবন্ধন সম্পন্ন করুন',
-        'back_dashboard' => 'ব্যবহারকারী তালিকায় ফিরে যান',
-        'logged_as' => 'লগইন আছেন',
+        'back_login' => 'লগইনে ফিরে যান',
         'copyright' => '২০২৫ কেসফ্লোএক্স — মামলা ব্যবস্থাপনা প্ল্যাটফর্ম',
         
         // Steps
@@ -139,43 +145,11 @@ $cur = $t[$lang];
 </head>
 <body class="bg-[#F4F6F9] min-h-screen flex flex-col justify-between">
 
-    <!-- Top Navigation Bar -->
-    <div>
-        <div class="bg-navyDark border-b border-white/10 px-6 py-2 flex justify-between items-center gap-2">
-            <div class="text-xs text-[#8FA3C8] font-medium flex items-center gap-2">
-                <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span><?php echo $cur['logged_as']; ?>: <strong><?php echo htmlspecialchars($_SESSION['username']); ?></strong> (Admin)</span>
-            </div>
-            <div class="flex items-center gap-2">
-                <i class="ti ti-world text-white/50 text-base"></i>
-                <a href="?lang=en" class="px-2.5 py-0.5 text-xs rounded-full border border-white/20 transition-all <?php echo $lang === 'en' ? 'bg-accent text-white font-semibold border-accent' : 'text-[#8FA3C8] hover:bg-white/10 hover:text-white'; ?>">English</a>
-                <a href="?lang=bn" class="px-2.5 py-0.5 text-xs rounded-full border border-white/20 transition-all <?php echo $lang === 'bn' ? 'bg-accent text-white font-semibold border-accent' : 'text-[#8FA3C8] hover:bg-white/10 hover:text-white'; ?>">বাংলা</a>
-            </div>
-        </div>
-
-        <nav class="bg-navy px-6 py-3 flex items-center justify-between shadow-md">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 bg-accent rounded-lg flex items-center justify-center text-white text-2xl shadow">
-                    <i class="ti ti-shield-check"></i>
-                </div>
-                <div>
-                    <h1 class="text-white font-bold leading-none text-base">PoliceNet BD</h1>
-                    <span class="text-xs text-accent font-semibold tracking-wide mt-0.5 block">Admin Control Panel</span>
-                </div>
-            </div>
-            
-            <div class="flex items-center gap-4">
-                <div class="hidden md:flex gap-1">
-                    <a href="home.html" class="text-slate-300 hover:text-white px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-1.5"><i class="ti ti-home"></i> <?php echo $lang === 'bn' ? 'হোম' : 'Home'; ?></a>
-                    <a href="admin_users.php" class="text-slate-300 hover:text-white px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-1.5"><i class="ti ti-users"></i> <?php echo $lang === 'bn' ? 'ব্যবহারকারী' : 'Users'; ?></a>
-                    <a href="#" class="text-slate-300 hover:text-white px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-1.5"><i class="ti ti-file-description"></i> FIR</a>
-                </div>
-                <a href="login.php?logout=1" class="bg-rose-600 hover:bg-rose-700 text-white font-semibold px-4 py-1.5 rounded-xl text-sm transition-all flex items-center gap-1.5 shadow shadow-rose-600/25">
-                    <i class="ti ti-logout"></i>
-                    <?php echo $lang === 'bn' ? 'লগআউট' : 'Log Out'; ?>
-                </a>
-            </div>
-        </nav>
+    <!-- Top Language Bar -->
+    <div class="bg-navyDark border-b border-white/10 px-6 py-2 flex justify-end items-center gap-2">
+        <i class="ti ti-world text-white/50 text-base"></i>
+        <a href="?lang=en" class="px-3 py-1 text-xs rounded-full border border-white/20 transition-all <?php echo $lang === 'en' ? 'bg-accent text-white font-semibold border-accent' : 'text-[#8FA3C8] hover:bg-white/10 hover:text-white'; ?>">English</a>
+        <a href="?lang=bn" class="px-3 py-1 text-xs rounded-full border border-white/20 transition-all <?php echo $lang === 'bn' ? 'bg-accent text-white font-semibold border-accent' : 'text-[#8FA3C8] hover:bg-white/10 hover:text-white'; ?>">বাংলা</a>
     </div>
 
     <!-- Main Container -->
@@ -183,8 +157,8 @@ $cur = $t[$lang];
 
         <!-- Breadcrumb -->
         <div class="flex items-center gap-2 text-sm text-gray-500 justify-start">
-            <a href="admin_users.php" class="hover:text-accent transition-colors flex items-center gap-1 font-semibold">
-                <i class="ti ti-users text-base"></i> <?php echo $lang === 'bn' ? 'ব্যবহারকারী ডিরেক্টরি' : 'User Directory'; ?>
+            <a href="login.php" class="hover:text-accent transition-colors flex items-center gap-1 font-semibold">
+                <i class="ti ti-arrow-left text-base"></i> <?php echo $cur['back_login']; ?>
             </a>
             <i class="ti ti-chevron-right text-xs"></i>
             <span class="text-gray-700 font-bold"><?php echo $cur['heading']; ?></span>
@@ -238,7 +212,7 @@ $cur = $t[$lang];
 
                 <form id="reg-form" novalidate>
                     
-                    <!-- STEP 1 - Personal Info (Matching Mockup exactly) -->
+                    <!-- STEP 1 - Personal Info -->
                     <div class="step-panel" id="panel-1">
                         <h2 class="text-navy font-bold text-base mb-5 flex items-center gap-2">
                             <i class="ti ti-user-circle text-accent text-lg"></i>
@@ -441,10 +415,10 @@ $cur = $t[$lang];
                                     </span>
                                     <select id="role" name="role" required
                                             class="w-full pl-9 pr-8 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition appearance-none bg-white text-navy font-medium">
+                                        <option value="Admin">Admin</option>
                                         <option value="Officer">Officer</option>
                                         <option value="Investigator">Investigator</option>
                                         <option value="Citizen">Citizen</option>
-                                        <option value="Admin">Admin</option>
                                     </select>
                                     <span class="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400">
                                         <i class="ti ti-chevron-down text-sm"></i>
@@ -542,7 +516,7 @@ $cur = $t[$lang];
                             <?php echo $cur['btn_prev']; ?>
                         </button>
                         
-                        <a href="admin_users.php" id="cancel-btn"
+                        <a href="login.php" id="cancel-btn"
                            class="px-5 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 hover:bg-slate-50 transition-colors text-slate-700">
                             <?php echo $cur['btn_cancel']; ?>
                         </a>
@@ -567,10 +541,10 @@ $cur = $t[$lang];
                         <i class="ti ti-circle-check"></i>
                     </div>
                     <h2 class="text-navy text-2xl font-bold mb-2">
-                        <?php echo $lang === 'bn' ? 'নিবন্ধন সফল হয়েছে!' : 'User Account Created!'; ?>
+                        <?php echo $lang === 'bn' ? 'নিবন্ধন সফল হয়েছে!' : 'Account Created Successfully!'; ?>
                     </h2>
                     <p class="text-slate-500 mb-6 text-sm max-w-sm mx-auto">
-                        <?php echo $lang === 'bn' ? 'নতুন ব্যবহারকারী সফলভাবে সিস্টেমে যুক্ত হয়েছে। আপনাকে ডিরেক্টরিতে ফিরিয়ে নেওয়া হচ্ছে...' : 'The new account has been stored. Redirecting back to the user list...'; ?>
+                        <?php echo $lang === 'bn' ? 'আপনার অ্যাকাউন্টটি সফলভাবে তৈরি হয়েছে। লগইন পৃষ্ঠায় নিয়ে যাওয়া হচ্ছে...' : 'Your account has been registered successfully. Redirecting you to the login page...'; ?>
                     </p>
                 </div>
 
@@ -579,9 +553,9 @@ $cur = $t[$lang];
 
         <!-- Back Link -->
         <div class="text-center">
-            <a href="admin_users.php" class="inline-flex items-center gap-1.5 text-sm font-semibold text-accent hover:text-accent-dark transition-colors">
+            <a href="login.php" class="inline-flex items-center gap-1.5 text-sm font-semibold text-accent hover:text-accent-dark transition-colors">
                 <i class="ti ti-arrow-left"></i>
-                <?php echo $cur['back_dashboard']; ?>
+                <?php echo $cur['back_login']; ?>
             </a>
         </div>
     </main>
@@ -590,7 +564,7 @@ $cur = $t[$lang];
     <footer class="bg-navy border-t border-white/10 py-6 mt-12">
         <div class="max-w-7xl mx-auto px-4 text-center">
             <p class="text-xs text-[#8FA3C8]">
-                <i class="ti ti-copyright text-[11px] inline-block mr-0.5"></i> <?php echo $cur['copyright']; ?>
+                <i class="ti ti-copyright text-[11px] inline-block mr-0.5"></i> 2025 CaseFlowX — Case Management Platform
             </p>
         </div>
     </footer>
@@ -802,13 +776,6 @@ $cur = $t[$lang];
             }
         }
 
-        function prevStep() {
-            if (currentStep > 1) {
-                currentStep--;
-                updateStepsUI();
-            }
-        }
-
         // Form Submit Handler
         document.getElementById('reg-form').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -825,14 +792,14 @@ $cur = $t[$lang];
 
             try {
                 const formData = new FormData(this);
-                const resp = await fetch('register_action.php', { method: 'POST', body: formData });
+                const resp = await fetch('signup_action.php', { method: 'POST', body: formData });
                 const data = await resp.json();
 
                 if (data.success) {
                     document.getElementById('reg-form').classList.add('hidden');
                     document.getElementById('success-panel').classList.remove('hidden');
                     setTimeout(() => {
-                        window.location.href = data.redirect || 'admin_users.php';
+                        window.location.href = data.redirect || 'login.php';
                     }, 1500);
                 } else {
                     if (data.errors) {

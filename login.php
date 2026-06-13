@@ -1,252 +1,268 @@
 <?php
-/**
- * login.php — CaseFlowX Citizen Login Page
- * Rendered inside master.html layout.
- */
-?>
-<!-- ═══════════════════════════════════════════════════════════════════════════
-     CaseFlowX — Citizen Login
-     Tailwind CSS via CDN · Tabler Icons · PHP backend
-     ═══════════════════════════════════════════════════════════════════════════ -->
+// login.php - Login Page
+require_once __DIR__ . '/auth.php';
 
-<!-- Tailwind + Tabler -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-<script src="https://cdn.tailwindcss.com"></script>
-<script>
-  tailwind.config = {
-    theme: {
-      extend: {
-        colors: {
-          navy:   '#1B2A4A',
-          accent: '#1D9E75',
-          'accent-dark': '#0F6E56',
-        }
-      }
-    }
-  }
-</script>
-
-<!-- ── Page content ─────────────────────────────────────────────────────── -->
-<div class="min-h-screen bg-[#F4F6F9] py-10 px-4">
-
-  <!-- Breadcrumb -->
-  <div class="max-w-md mx-auto mb-5 flex items-center gap-2 text-sm text-gray-500">
-    <a href="home.php" class="hover:text-accent transition-colors flex items-center gap-1">
-      <i class="ti ti-home text-base"></i> Home
-    </a>
-    <i class="ti ti-chevron-right text-xs"></i>
-    <span class="text-gray-700 font-medium">Citizen Login</span>
-  </div>
-
-  <!-- Card -->
-  <div class="max-w-md mx-auto bg-white rounded-2xl shadow-md overflow-hidden">
-
-    <!-- Card header -->
-    <div class="bg-navy px-8 py-6 flex items-center gap-4">
-      <div class="w-12 h-12 rounded-xl bg-accent flex items-center justify-center text-white text-2xl shadow">
-        <i class="ti ti-login"></i>
-      </div>
-      <div>
-        <h1 class="text-white text-xl font-bold leading-tight">Citizen Login</h1>
-        <p class="text-white/55 text-sm mt-0.5">Sign in to file complaints &amp; track cases</p>
-      </div>
-    </div>
-
-    <div class="px-8 py-8">
-
-      <!-- Global alert (shown on server/fetch errors) -->
-      <div id="alert-global" class="hidden mb-5 flex items-start gap-3 p-4 rounded-xl text-sm border"></div>
-
-      <form id="login-form" novalidate>
-
-        <!-- Phone / NID -->
-        <div class="mb-4">
-          <label for="identifier" class="block text-xs font-semibold text-gray-600 mb-1.5">
-            Phone Number or NID <span class="text-red-400">*</span>
-          </label>
-          <div class="relative">
-            <span class="absolute inset-y-0 left-3 flex items-center text-gray-400 pointer-events-none">
-              <i class="ti ti-user text-base"></i>
-            </span>
-            <input type="text" id="identifier" name="identifier"
-                   placeholder="01XXXXXXXXX or 10/17-digit NID"
-                   class="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200
-                          text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent
-                          transition placeholder-gray-300">
-          </div>
-          <p class="err-msg hidden text-xs text-red-500 mt-1 flex items-center gap-1" id="err-identifier">
-            <i class="ti ti-alert-circle text-sm"></i> <span></span>
-          </p>
-        </div>
-
-        <!-- Password -->
-        <div class="mb-2">
-          <label for="password" class="block text-xs font-semibold text-gray-600 mb-1.5">
-            Password <span class="text-red-400">*</span>
-          </label>
-          <div class="relative">
-            <span class="absolute inset-y-0 left-3 flex items-center text-gray-400 pointer-events-none">
-              <i class="ti ti-lock text-base"></i>
-            </span>
-            <input type="password" id="password" name="password"
-                   placeholder="Enter your password"
-                   class="w-full pl-9 pr-10 py-2.5 rounded-xl border border-gray-200
-                          text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent
-                          transition placeholder-gray-300">
-            <button type="button" onclick="togglePwd('password')"
-                    class="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-600">
-              <i class="ti ti-eye text-base" id="eye-password"></i>
-            </button>
-          </div>
-          <p class="err-msg hidden text-xs text-red-500 mt-1 flex items-center gap-1" id="err-password">
-            <i class="ti ti-alert-circle text-sm"></i> <span></span>
-          </p>
-        </div>
-
-        <!-- Remember me & Forgot password -->
-        <div class="flex items-center justify-between mb-6">
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" id="remember" name="remember"
-                   class="w-4 h-4 rounded accent-accent cursor-pointer">
-            <span class="text-sm text-gray-600">Remember me</span>
-          </label>
-          <a href="#" class="text-sm text-accent font-medium hover:underline">Forgot password?</a>
-        </div>
-
-        <!-- Submit button -->
-        <button type="submit" id="submit-btn"
-                class="w-full bg-accent hover:bg-accent-dark text-white px-6 py-2.5 rounded-xl
-                       text-sm font-semibold flex items-center justify-center gap-2 transition">
-          <i class="ti ti-login text-base"></i> Sign In
-        </button>
-
-      </form>
-
-      <!-- ── Success state (redirect) ─────────────────────── -->
-      <div id="success-panel" class="hidden text-center py-8">
-        <div class="w-20 h-20 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-5">
-          <i class="ti ti-circle-check text-accent text-5xl"></i>
-        </div>
-        <h2 class="text-navy text-2xl font-bold mb-2">Login Successful!</h2>
-        <p class="text-gray-500 mb-6 text-sm max-w-sm mx-auto">
-          Welcome back! Redirecting you to your dashboard...
-        </p>
-      </div>
-
-    </div><!-- /px-8 py-8 -->
-
-    <!-- Card footer -->
-    <div class="bg-[#f8f9fc] border-t border-gray-100 px-8 py-4 text-center text-sm text-gray-500">
-      Don't have an account?
-      <a href="register(2).php" class="text-accent font-semibold hover:underline ml-1">Create one now</a>
-    </div>
-
-  </div><!-- /card -->
-</div>
-
-<!-- ── JavaScript ───────────────────────────────────────────────────────── -->
-<script>
-/* ── Show/hide password ─────────────────────────────────────────────────── */
-function togglePwd(id) {
-  const inp = document.getElementById(id);
-  const ico = document.getElementById('eye-' + id);
-  if (inp.type === 'password') {
-    inp.type = 'text';
-    ico.className = 'ti ti-eye-off text-base';
-  } else {
-    inp.type = 'password';
-    ico.className = 'ti ti-eye text-base';
-  }
-}
-
-/* ── Client-side validation ─────────────────────────────────────────────── */
-function clearErrors() {
-  document.querySelectorAll('.err-msg').forEach(e => e.classList.add('hidden'));
-  document.getElementById('identifier').classList.remove('border-red-400','ring-red-200');
-  document.getElementById('identifier').classList.add('border-gray-200');
-  document.getElementById('password').classList.remove('border-red-400','ring-red-200');
-  document.getElementById('password').classList.add('border-gray-200');
-}
-
-function showError(field, msg) {
-  const el = document.getElementById('err-' + field);
-  const input = document.getElementById(field);
-  if (el) { el.classList.remove('hidden'); el.querySelector('span').textContent = msg; }
-  if (input) {
-    input.classList.remove('border-gray-200');
-    input.classList.add('border-red-400', 'ring-2', 'ring-red-100');
-  }
-}
-
-function validateForm() {
-  clearErrors();
-  let ok = true;
-
-  const identifier = document.getElementById('identifier').value.trim();
-  const password = document.getElementById('password').value;
-
-  if (!identifier) {
-    showError('identifier', 'Phone or NID is required.');
-    ok = false;
-  } else {
-    // Check if it looks like a phone or NID
-    const isPhone = /^01[3-9]\d{8}$/.test(identifier);
-    const isNID = /^\d{10}$|^\d{17}$/.test(identifier);
-    if (!isPhone && !isNID) {
-      showError('identifier', 'Enter a valid phone number or NID.');
-      ok = false;
-    }
-  }
-
-  if (!password) {
-    showError('password', 'Password is required.');
-    ok = false;
-  }
-
-  return ok;
-}
-
-/* ── Form submission ─────────────────────────────────────────────────────── */
-document.getElementById('login-form').addEventListener('submit', async function(e) {
-  e.preventDefault();
-  clearErrors();
-
-  if (!validateForm()) return;
-
-  const btn = document.getElementById('submit-btn');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="ti ti-loader-2 animate-spin text-base"></i> Signing in…';
-
-  const global = document.getElementById('alert-global');
-  global.classList.add('hidden');
-
-  try {
-    const formData = new FormData(this);
-    const resp = await fetch('login_action.php', { method: 'POST', body: formData });
-    const data = await resp.json();
-
-    if (data.success) {
-      document.getElementById('login-form').classList.add('hidden');
-      document.getElementById('success-panel').classList.remove('hidden');
-      // Redirect after brief delay
-      setTimeout(() => {
-        window.location.href = data.redirect || 'dashboard.php';
-      }, 1500);
+// Redirect if already logged in
+if (is_logged_in()) {
+    if ($_SESSION['role'] === 'Admin') {
+        header("Location: admin_users.php");
+        exit;
     } else {
-      if (data.errors) {
-        Object.entries(data.errors).forEach(([k, v]) => showError(k, v));
-      }
-      global.className = 'mb-5 flex items-start gap-3 p-4 rounded-xl text-sm border bg-red-50 border-red-200 text-red-700';
-      global.innerHTML = `<i class="ti ti-alert-triangle text-lg flex-shrink-0 mt-0.5"></i><span>${data.message}</span>`;
-      global.classList.remove('hidden');
+        header("Location: unauthorized.php");
+        exit;
     }
-  } catch (err) {
-    global.className = 'mb-5 flex items-start gap-3 p-4 rounded-xl text-sm border bg-red-50 border-red-200 text-red-700';
-    global.innerHTML = '<i class="ti ti-alert-triangle text-lg flex-shrink-0 mt-0.5"></i><span>Network error. Please check your connection and try again.</span>';
-    global.classList.remove('hidden');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="ti ti-login text-base"></i> Sign In';
-  }
-});
-</script>
+}
+
+$error = '';
+$info = '';
+
+if (isset($_GET['logout'])) {
+    logout();
+    $info = $_SESSION['lang'] === 'bn' ? 'সফলভাবে লগআউট করা হয়েছে।' : 'Logged out successfully.';
+}
+
+if (isset($_GET['error'])) {
+    $error = htmlspecialchars($_GET['error']);
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $identifier = trim($_POST['username'] ?? ''); // Maps to phone or NID
+    $password = $_POST['password'] ?? '';
+    
+    if (empty($identifier) || empty($password)) {
+        $error = $_SESSION['lang'] === 'bn' ? 'অনুগ্রহ করে মোবাইল নম্বর/এনআইডি এবং পাসওয়ার্ড প্রদান করুন।' : 'Please enter both Phone/NID and password.';
+    } else {
+        $res = login($identifier, $password);
+        if ($res['success']) {
+            if ($_SESSION['role'] === 'Admin') {
+                header("Location: admin_users.php");
+            } else {
+                header("Location: unauthorized.php");
+            }
+            exit;
+        } else {
+            $error = $res['error'];
+        }
+    }
+}
+
+$lang = $_SESSION['lang'];
+
+$t = [
+    'en' => [
+        'title' => 'CaseFlowX — Police Portal Login',
+        'heading' => 'Police Portal Login',
+        'subheading' => 'Access CaseFlowX Case Management Platform',
+        'username' => 'Phone Number or NID',
+        'password' => 'Password',
+        'login' => 'Log In',
+        'demo_title' => 'Demo Testing Accounts',
+        'copyright' => '2025 CaseFlowX — Case Management Platform',
+        'developed' => 'Developed by CaseFlowX',
+        'privacy' => 'Privacy Policy',
+        'terms' => 'Terms of Use',
+        'contact' => 'Contact Us',
+        'back_home' => 'Back to Home',
+        'no_account' => "Don't have an account?",
+        'register_link' => 'Create one now'
+    ],
+    'bn' => [
+        'title' => 'কেসফ্লোএক্স — পুলিশ পোর্টাল লগইন',
+        'heading' => 'পুলিশ পোর্টাল লগইন',
+        'subheading' => 'কেসফ্লোএক্স মামলা ব্যবস্থাপনা প্ল্যাটফর্ম',
+        'username' => 'মোবাইল নম্বর বা এনআইডি',
+        'password' => 'পাসওয়ার্ড',
+        'login' => 'লগইন করুন',
+        'demo_title' => 'ডেমো টেস্টিং অ্যাকাউন্ট',
+        'copyright' => '২০২৫ কেসফ্লোএক্স — মামলা ব্যবস্থাপনা প্ল্যাটফর্ম',
+        'developed' => 'কেসফ্লোএক্স দ্বারা তৈরি',
+        'privacy' => 'গোপনীয়তা নীতি',
+        'terms' => 'ব্যবহারের শর্তাবলী',
+        'contact' => 'যোগাযোগ করুন',
+        'back_home' => 'হোমে ফিরে যান',
+        'no_account' => 'অ্যাকাউন্ট নেই?',
+        'register_link' => 'এখনই তৈরি করুন'
+    ]
+];
+
+$cur = $t[$lang];
+?>
+<!DOCTYPE html>
+<html lang="<?php echo $lang; ?>">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?php echo $cur['title']; ?></title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tabler Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        navy: '#1B2A4A',
+                        accent: '#1D9E75',
+                        'accent-dark': '#0F6E56',
+                        navyDark: '#141f36',
+                        navy2: '#253554',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'Segoe UI', 'sans-serif'],
+                        bengali: ['Hind Siliguri', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: <?php echo $lang === 'bn' ? "'Hind Siliguri', 'Inter', sans-serif" : "'Inter', sans-serif"; ?>;
+        }
+    </style>
+</head>
+<body class="bg-[#F4F6F9] min-h-screen flex flex-col justify-between">
+
+    <!-- Top Language Bar -->
+    <div class="bg-navyDark border-b border-white/10 px-6 py-2 flex justify-end items-center gap-2">
+        <i class="ti ti-world text-white/50 text-base"></i>
+        <a href="?lang=en" class="px-3 py-1 text-xs rounded-full border border-white/20 transition-all <?php echo $lang === 'en' ? 'bg-accent text-white font-semibold border-accent' : 'text-[#8FA3C8] hover:bg-white/10 hover:text-white'; ?>">English</a>
+        <a href="?lang=bn" class="px-3 py-1 text-xs rounded-full border border-white/20 transition-all <?php echo $lang === 'bn' ? 'bg-accent text-white font-semibold border-accent' : 'text-[#8FA3C8] hover:bg-white/10 hover:text-white'; ?>">বাংলা</a>
+    </div>
+
+    <!-- Main Container -->
+    <div class="flex-1 flex items-center justify-center p-4">
+        <div class="max-w-md w-full">
+            
+            <!-- Breadcrumb -->
+            <div class="mb-5 flex items-center gap-2 text-sm text-gray-500 justify-start">
+                <a href="home.html" class="hover:text-accent transition-colors flex items-center gap-1 font-medium">
+                    <i class="ti ti-home text-base"></i> <?php echo $lang === 'bn' ? 'হোম' : 'Home'; ?>
+                </a>
+                <i class="ti ti-chevron-right text-xs"></i>
+                <span class="text-gray-700 font-semibold"><?php echo $lang === 'bn' ? 'পোর্টাল লগইন' : 'Portal Login'; ?></span>
+            </div>
+
+            <!-- Login Card -->
+            <div class="bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden">
+                <!-- Card Header -->
+                <div class="bg-navy px-8 py-6 flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-xl bg-accent flex items-center justify-center text-white text-2xl shadow">
+                        <i class="ti ti-user-shield"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-white text-xl font-bold leading-tight"><?php echo $cur['heading']; ?></h1>
+                        <p class="text-white/55 text-xs mt-0.5"><?php echo $cur['subheading']; ?></p>
+                    </div>
+                </div>
+                
+                <div class="px-8 py-8">
+                    <!-- Notifications -->
+                    <?php if (!empty($error)): ?>
+                        <div class="mb-5 p-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl flex items-start gap-3">
+                            <i class="ti ti-alert-triangle text-lg mt-0.5 shrink-0"></i>
+                            <div><?php echo $error; ?></div>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if (!empty($info)): ?>
+                        <div class="mb-5 p-4 bg-green-50 border border-green-200 text-green-700 text-sm rounded-xl flex items-start gap-3">
+                            <i class="ti ti-circle-check text-lg mt-0.5 shrink-0 text-accent"></i>
+                            <div><?php echo $info; ?></div>
+                        </div>
+                    <?php endif; ?>
+
+                    <form action="" method="POST" class="space-y-4">
+                        <div>
+                            <label for="username" class="block text-xs font-semibold text-gray-600 mb-1.5">
+                                <?php echo $cur['username']; ?> <span class="text-red-400">*</span>
+                            </label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-3 flex items-center text-gray-400">
+                                    <i class="ti ti-device-mobile text-base"></i>
+                                </span>
+                                <input type="text" name="username" id="username" required
+                                       class="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition placeholder-gray-300 text-navy"
+                                       placeholder="01XXXXXXXXX or NID">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label for="password" class="block text-xs font-semibold text-gray-600 mb-1.5">
+                                <?php echo $cur['password']; ?> <span class="text-red-400">*</span>
+                            </label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-3 flex items-center text-gray-400">
+                                    <i class="ti ti-lock text-base"></i>
+                                </span>
+                                <input type="password" name="password" id="password" required
+                                       class="w-full pl-9 pr-10 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition placeholder-gray-300 text-navy"
+                                       placeholder="••••••••">
+                                <button type="button" onclick="togglePwd()"
+                                        class="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-600">
+                                    <i class="ti ti-eye text-base" id="eye-icon"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <button type="submit"
+                                class="w-full bg-accent hover:bg-accent-dark text-white px-6 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition mt-4 shadow-md">
+                            <i class="ti ti-login text-base"></i>
+                            <?php echo $cur['login']; ?>
+                        </button>
+
+                        <div class="text-center text-sm text-gray-500 mt-4">
+                            <?php echo $cur['no_account']; ?>
+                            <a href="signup.php" class="text-accent font-semibold hover:underline ml-1">
+                                <?php echo $cur['register_link']; ?>
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Home link -->
+            <div class="text-center mt-4">
+                <a href="home.html" class="inline-flex items-center gap-1.5 text-sm font-semibold text-accent hover:text-accent-dark transition-colors">
+                    <i class="ti ti-arrow-left"></i>
+                    <?php echo $cur['back_home']; ?>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-navy border-t border-white/10 py-6">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <div class="flex justify-center gap-6 flex-wrap mb-3 text-sm text-[#8FA3C8]">
+                <a href="#" class="hover:underline flex items-center gap-1"><i class="ti ti-lock"></i> <?php echo $cur['privacy']; ?></a>
+                <a href="#" class="hover:underline flex items-center gap-1"><i class="ti ti-file-certificate"></i> <?php echo $cur['terms']; ?></a>
+                <a href="#" class="hover:underline flex items-center gap-1"><i class="ti ti-mail"></i> <?php echo $cur['contact']; ?></a>
+            </div>
+            <p class="text-xs text-[#8FA3C8]">
+                <i class="ti ti-copyright text-[11px] inline-block mr-0.5"></i> <?php echo $cur['copyright']; ?>
+            </p>
+            <p class="text-xs text-slate-500 mt-1">
+                <i class="ti ti-building-community"></i> <?php echo $cur['developed']; ?>
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        function togglePwd() {
+            const pwdInput = document.getElementById('password');
+            const eyeIcon = document.getElementById('eye-icon');
+            if (pwdInput.type === 'password') {
+                pwdInput.type = 'text';
+                eyeIcon.className = 'ti ti-eye-off text-base';
+            } else {
+                pwdInput.type = 'password';
+                eyeIcon.className = 'ti ti-eye text-base';
+            }
+        }
+    </script>
+</body>
+</html>

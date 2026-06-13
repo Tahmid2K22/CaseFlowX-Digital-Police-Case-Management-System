@@ -1,5 +1,5 @@
 <?php
-// register_action.php - Handles admin registering user accounts
+// signup_action.php - Handles guest public registrations
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -7,12 +7,6 @@ if (session_status() === PHP_SESSION_NONE) {
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/auth.php';
-
-// RBAC Check: Restrict to Admin only
-if (!is_logged_in() || $_SESSION['role'] !== 'Admin') {
-    echo json_encode(['success' => false, 'message' => 'Unauthorized access. Only administrators can perform this action.']);
-    exit;
-}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(['success' => false, 'message' => 'Method not allowed.']);
@@ -158,8 +152,8 @@ try {
     if ($res) {
         echo json_encode([
             'success' => true, 
-            'message' => ($_SESSION['lang'] === 'bn' ? 'ব্যবহারকারী অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে!' : 'User account created successfully!'), 
-            'redirect' => 'admin_users.php'
+            'message' => ($_SESSION['lang'] === 'bn' ? 'অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে!' : 'Account created successfully!'), 
+            'redirect' => 'login.php'
         ]);
     } else {
         echo json_encode(['success' => false, 'message' => ($_SESSION['lang'] === 'bn' ? 'অ্যাকাউন্ট তৈরি করতে ব্যর্থ হয়েছে।' : 'Failed to create account.')]);
