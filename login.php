@@ -5,7 +5,7 @@ require_once __DIR__ . '/auth.php';
 // Handle logout first if requested
 if (isset($_GET['logout'])) {
     logout();
-    $info = $_SESSION['lang'] === 'bn' ? 'সফলভাবে লগআউট করা হয়েছে।' : 'Logged out successfully.';
+    $info = ($_SESSION['lang'] ?? 'en') === 'bn' ? 'সফলভাবে লগআউট করা হয়েছে।' : 'Logged out successfully.';
 }
 
 // Redirect if already logged in
@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
     
     if (empty($identifier) || empty($password)) {
-        $_SESSION['login_error'] = $_SESSION['lang'] === 'bn' ? 'অনুগ্রহ করে মোবাইল নম্বর/এনআইডি এবং পাসওয়ার্ড প্রদান করুন।' : 'Please enter both Phone/NID and password.';
+        $_SESSION['login_error'] = ($_SESSION['lang'] ?? 'en') === 'bn' ? 'অনুগ্রহ করে মোবাইল নম্বর/এনআইডি এবং পাসওয়ার্ড প্রদান করুন।' : 'Please enter both Phone/NID and password.';
         $_SESSION['login_username'] = $identifier;
         header("Location: login.php");
         exit;
@@ -64,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$lang = $_SESSION['lang'];
+$lang = $_SESSION['lang'] ?? 'en';
 
 $t = [
     'en' => [

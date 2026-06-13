@@ -57,8 +57,15 @@ function logout() {
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
     }
+    $lang = $_SESSION['lang'] ?? 'en';
     $_SESSION = [];
     session_destroy();
+
+    // Restart session to store language preference
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    $_SESSION['lang'] = $lang;
 }
 
 /**
