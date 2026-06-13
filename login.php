@@ -2,6 +2,12 @@
 // login.php - Login Page
 require_once __DIR__ . '/auth.php';
 
+// Handle logout first if requested
+if (isset($_GET['logout'])) {
+    logout();
+    $info = $_SESSION['lang'] === 'bn' ? 'সফলভাবে লগআউট করা হয়েছে।' : 'Logged out successfully.';
+}
+
 // Redirect if already logged in
 if (is_logged_in()) {
     if ($_SESSION['role'] === 'Admin') {
@@ -16,9 +22,15 @@ if (is_logged_in()) {
 $error = '';
 $info = '';
 
-if (isset($_GET['logout'])) {
-    logout();
-    $info = $_SESSION['lang'] === 'bn' ? 'সফলভাবে লগআউট করা হয়েছে।' : 'Logged out successfully.';
+if (isset($_SESSION['login_error'])) {
+    $error = $_SESSION['login_error'];
+    unset($_SESSION['login_error']);
+}
+
+$username_val = '';
+if (isset($_SESSION['login_username'])) {
+    $username_val = $_SESSION['login_username'];
+    unset($_SESSION['login_username']);
 }
 
 if (isset($_GET['error'])) {
@@ -30,7 +42,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
     
     if (empty($identifier) || empty($password)) {
-        $error = $_SESSION['lang'] === 'bn' ? 'অনুগ্রহ করে মোবাইল নম্বর/এনআইডি এবং পাসওয়ার্ড প্রদান করুন।' : 'Please enter both Phone/NID and password.';
+        $_SESSION['login_error'] = $_SESSION['lang'] === 'bn' ? 'অনুগ্রহ করে মোবাইল নম্বর/এনআইডি এবং পাসওয়ার্ড প্রদান করুন।' : 'Please enter both Phone/NID and password.';
+        $_SESSION['login_username'] = $identifier;
+        header("Location: login.php");
+        exit;
     } else {
         $res = login($identifier, $password);
         if ($res['success']) {
@@ -41,7 +56,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             exit;
         } else {
-            $error = $res['error'];
+            $_SESSION['login_error'] = $res['error'];
+            $_SESSION['login_username'] = $identifier;
+            header("Location: login.php");
+            exit;
         }
     }
 }
@@ -185,6 +203,7 @@ $cur = $t[$lang];
                                     <i class="ti ti-device-mobile text-base"></i>
                                 </span>
                                 <input type="text" name="username" id="username" required
+                                       value="<?php echo htmlspecialchars($username_val); ?>"
                                        class="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition placeholder-gray-300 text-navy"
                                        placeholder="01XXXXXXXXX or NID">
                             </div>
