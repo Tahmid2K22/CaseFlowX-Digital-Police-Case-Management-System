@@ -44,4 +44,22 @@ function init_schema(PDO $pdo): void {
             last_login      TEXT
         )
     ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS cases (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            citizen_id      INTEGER NOT NULL,
+            case_number     TEXT    NOT NULL UNIQUE,
+            title           TEXT    NOT NULL,
+            description     TEXT    NOT NULL,
+            status          TEXT    NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','resolved','closed')),
+            priority        TEXT    NOT NULL DEFAULT 'low' CHECK(priority IN ('low','medium','high')),
+            created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (citizen_id) REFERENCES citizens(id) ON DELETE CASCADE
+        )
+    ");
+
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_cases_citizen ON cases(citizen_id)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_cases_created ON cases(created_at)");
 }
