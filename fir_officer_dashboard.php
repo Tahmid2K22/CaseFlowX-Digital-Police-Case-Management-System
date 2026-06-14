@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * fir_officer_dashboard.php - CaseFlowX
  * Secure dashboard for FIR Officers (role = Officer).
@@ -110,7 +110,7 @@ body { font-family:'Inter',sans-serif; background:#F0F4F8; }
 <body class="min-h-screen flex overflow-hidden">
 
 <!-- SIDEBAR -->
-<aside class="w-64 min-h-screen bg-navyDark flex flex-col flex-shrink-0 shadow-xl" id="sidebar">
+<aside class="w-64 h-screen sticky top-0 bg-navyDark flex flex-col flex-shrink-0 shadow-xl overflow-y-auto" id="sidebar">
 
   <div class="px-6 py-5 border-b border-white/10 flex items-center gap-3">
     <div class="w-9 h-9 rounded-xl bg-accent flex items-center justify-center text-white shadow-lg">
@@ -139,13 +139,13 @@ body { font-family:'Inter',sans-serif; background:#F0F4F8; }
     <p class="text-[10px] font-bold uppercase tracking-widest text-white/30 px-3 pt-2 pb-1">Main</p>
     <a href="fir_officer_dashboard.php" class="sidebar-link active"><i class="ti ti-layout-dashboard text-base"></i> Dashboard</a>
     <a href="cases.php" class="sidebar-link"><i class="ti ti-file-description text-base"></i> FIR Cases</a>
-    <a href="new-case.php" class="sidebar-link"><i class="ti ti-plus text-base"></i> File New FIR</a>
+
     <p class="text-[10px] font-bold uppercase tracking-widest text-white/30 px-3 pt-4 pb-1">Account</p>
     <a href="profile.php" class="sidebar-link"><i class="ti ti-user-circle text-base"></i> My Profile</a>
     <a href="support.php" class="sidebar-link"><i class="ti ti-headset text-base"></i> Support</a>
   </nav>
 
-  <div class="px-3 pb-5 mt-auto border-t border-white/10 pt-4">
+  <div class="px-3 pb-5 pt-4 border-t border-white/10 bg-navyDark">
     <a href="login.php?logout=1" id="btn-logout"
        class="sidebar-link text-red-400 hover:text-red-300 hover:bg-red-500/10">
       <i class="ti ti-logout text-base"></i> Sign Out
@@ -200,9 +200,6 @@ body { font-family:'Inter',sans-serif; background:#F0F4F8; }
           </p>
         </div>
         <div class="flex items-center gap-3">
-          <a href="new-case.php" class="inline-flex items-center gap-2 bg-accent hover:bg-[#0F6E56] text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-md">
-            <i class="ti ti-plus"></i> File New FIR
-          </a>
           <a href="cases.php" class="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-all border border-white/20">
             <i class="ti ti-list"></i> All Cases
           </a>
@@ -388,9 +385,7 @@ body { font-family:'Inter',sans-serif; background:#F0F4F8; }
 </main>
 
 <script>
-document.getElementById('btn-logout')?.addEventListener('click', function(e) {
-  if (!confirm('Sign out of CaseFlowX? Your session data will be cleared.')) e.preventDefault();
-});
+// Sign Out: direct redirect, no confirmation dialog
 
 document.getElementById('btn-toggle-sidebar')?.addEventListener('click', function() {
   const s = document.getElementById('sidebar');
