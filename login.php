@@ -10,8 +10,15 @@ if (isset($_GET['logout'])) {
 
 // Redirect if already logged in
 if (is_logged_in()) {
-    if ($_SESSION['role'] === 'Admin') {
+    $role = $_SESSION['role'] ?? '';
+    if ($role === 'Admin') {
         header("Location: admin_users.php");
+        exit;
+    } elseif ($role === 'Officer') {
+        header("Location: fir_officer_dashboard.php");
+        exit;
+    } elseif ($role === 'Investigator') {
+        header("Location: unauthorized.php");
         exit;
     } else {
         header("Location: unauthorized.php");
@@ -49,8 +56,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $res = login($identifier, $password);
         if ($res['success']) {
-            if ($_SESSION['role'] === 'Admin') {
+            $role = $_SESSION['role'] ?? '';
+            if ($role === 'Admin') {
                 header("Location: admin_users.php");
+            } elseif ($role === 'Officer') {
+                header("Location: fir_officer_dashboard.php");
+            } elseif ($role === 'Investigator') {
+                header("Location: unauthorized.php");
             } else {
                 header("Location: unauthorized.php");
             }
