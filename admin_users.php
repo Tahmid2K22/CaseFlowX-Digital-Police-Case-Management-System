@@ -259,13 +259,14 @@ $cur = $t[$lang];
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo $cur['title']; ?></title>
+    <title><?php echo $cur['title']; ?> - CaseFlowX</title>
+    <meta name="description" content="Secure Admin Panel on CaseFlowX - manage user accounts and system roles.">
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Tabler Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
     <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script>
         tailwind.config = {
             theme: {
@@ -274,6 +275,7 @@ $cur = $t[$lang];
                         navy: '#1B2A4A',
                         accent: '#1D9E75',
                         'accent-dark': '#0F6E56',
+                        'accent-light': '#E8F8F3',
                         navyDark: '#141f36',
                         navy2: '#253554',
                     },
@@ -288,72 +290,129 @@ $cur = $t[$lang];
     <style>
         body {
             font-family: <?php echo $lang === 'bn' ? "'Hind Siliguri', 'Inter', sans-serif" : "'Inter', sans-serif"; ?>;
+            background: #F0F4F8;
         }
+        .sidebar-link {
+            display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+            border-radius: 10px; font-size: 14px; font-weight: 500;
+            color: rgba(255,255,255,0.70); transition: all 0.2s ease; text-decoration: none;
+        }
+        .sidebar-link:hover { background: rgba(255,255,255,0.08); color: #fff; }
+        .sidebar-link.active {
+            background: rgba(29,158,117,0.25); color: #1D9E75; border-left: 3px solid #1D9E75;
+        }
+        .stat-card {
+            border-radius: 16px; padding: 24px; transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .stat-card:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(0,0,0,0.12); }
+        .badge { display: inline-flex; align-items: center; padding: 3px 10px;
+            border-radius: 999px; font-size: 11px; font-weight: 600; }
+        @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+        @keyframes slideUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out; }
+        .animate-slide-up { animation: slideUp 0.5s ease-out; }
+        @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.4)} }
+        .pulse-dot { animation: pulse-dot 2s infinite; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 4px; }
     </style>
 </head>
-<body class="bg-[#F4F6F9] min-h-screen flex flex-col justify-between">
+<body class="min-h-screen flex overflow-hidden">
 
-    <!-- Top Navigation Bar -->
-    <div>
-        <div class="bg-navyDark border-b border-white/10 px-6 py-2 flex justify-between items-center gap-2">
-            <div class="text-xs text-[#8FA3C8] font-medium flex items-center gap-2">
-                <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span><?php echo $cur['logged_as']; ?>: <strong><?php echo htmlspecialchars($_SESSION['username']); ?></strong> (<?php echo $_SESSION['role']; ?>)</span>
-            </div>
-            <div class="flex items-center gap-2">
-                <i class="ti ti-world text-white/50 text-base"></i>
-                <a href="?lang=en<?php echo !empty($search) ? '&search='.urlencode($search) : ''; ?><?php echo !empty($filter_role) ? '&role='.urlencode($filter_role) : ''; ?><?php echo !empty($filter_status) ? '&status='.urlencode($filter_status) : ''; ?>" 
-                   class="px-2.5 py-0.5 text-xs rounded-full border border-white/20 transition-all <?php echo $lang === 'en' ? 'bg-accent text-white font-semibold border-accent' : 'text-[#8FA3C8] hover:bg-white/10 hover:text-white'; ?>">English</a>
-                <a href="?lang=bn<?php echo !empty($search) ? '&search='.urlencode($search) : ''; ?><?php echo !empty($filter_role) ? '&role='.urlencode($filter_role) : ''; ?><?php echo !empty($filter_status) ? '&status='.urlencode($filter_status) : ''; ?>" 
-                   class="px-2.5 py-0.5 text-xs rounded-full border border-white/20 transition-all <?php echo $lang === 'bn' ? 'bg-accent text-white font-semibold border-accent' : 'text-[#8FA3C8] hover:bg-white/10 hover:text-white'; ?>">বাংলা</a>
-            </div>
+<?php
+$adminName = $_SESSION['username'] ?? 'Admin';
+$nameParts = array_slice(explode(' ', $adminName), 0, 2);
+$initials  = strtoupper(implode('', array_map(fn($w) => !empty($w) ? $w[0] : '', $nameParts)));
+?>
+
+<!-- SIDEBAR -->
+<aside class="w-64 h-screen sticky top-0 bg-navyDark flex flex-col flex-shrink-0 shadow-xl overflow-y-auto" id="sidebar">
+
+    <div class="px-6 py-5 border-b border-white/10 flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-accent flex items-center justify-center text-white shadow-lg">
+            <i class="ti ti-shield-check text-lg"></i>
         </div>
-
-        <nav class="bg-navy px-6 py-3 flex items-center justify-between shadow-md">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 bg-accent rounded-lg flex items-center justify-center text-white text-2xl shadow">
-                    <i class="ti ti-shield-check"></i>
-                </div>
-                <div>
-                    <h1 class="text-white font-bold leading-none text-base">PoliceNet BD</h1>
-                    <span class="text-xs text-accent font-semibold tracking-wide mt-0.5 block">Admin Control Panel</span>
-                </div>
-            </div>
-            
-            <div class="flex items-center gap-4">
-                <div class="hidden md:flex gap-1">
-                    <a href="home.html" class="text-slate-300 hover:text-white px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-1.5"><i class="ti ti-home"></i> <?php echo $lang === 'bn' ? 'হোম' : 'Home'; ?></a>
-                    <a href="#" class="text-white bg-white/10 px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1.5"><i class="ti ti-users"></i> <?php echo $lang === 'bn' ? 'ব্যবহারকারী' : 'Users'; ?></a>
-                    <a href="#" class="text-slate-300 hover:text-white px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-1.5"><i class="ti ti-file-description"></i> FIR</a>
-                </div>
-                <a href="login.php?logout=1" class="bg-rose-600 hover:bg-rose-700 text-white font-semibold px-4 py-1.5 rounded-xl text-sm transition-all flex items-center gap-1.5 shadow shadow-rose-600/25">
-                    <i class="ti ti-logout"></i>
-                    <?php echo $cur['btn_logout']; ?>
-                </a>
-            </div>
-        </nav>
+        <div>
+            <span class="text-white font-bold text-base tracking-tight">CaseFlowX</span>
+            <p class="text-white/40 text-[10px] font-medium tracking-wider uppercase">Admin Portal</p>
+        </div>
     </div>
 
-    <!-- Main Content Container -->
-    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 space-y-6">
-        
-        <!-- Header Section -->
-        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-                <h2 class="text-2xl font-bold text-navy flex items-center gap-2">
-                    <i class="ti ti-users-gear text-accent"></i>
-                    <?php echo $cur['heading']; ?>
-                </h2>
-                <p class="text-sm text-slate-500 font-medium mt-1">
-                    <?php echo $cur['subheading']; ?>
-                </p>
-            </div>
-            <a href="register.php"
-               class="bg-accent hover:bg-accent-dark text-white font-bold px-4 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2 text-sm shrink-0">
-                <i class="ti ti-user-plus text-base"></i>
-                <?php echo $cur['btn_add']; ?>
-            </a>
+    <div class="mx-4 mt-5 mb-4 p-3 rounded-xl bg-white/5 border border-white/10 flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-[#0F6E56] flex items-center justify-center text-white text-sm font-bold shadow">
+            <?php echo htmlspecialchars($initials); ?>
         </div>
+        <div class="flex-1 min-w-0">
+            <p class="text-white text-xs font-semibold truncate"><?php echo htmlspecialchars($adminName); ?></p>
+            <p class="text-accent text-[10px] font-medium flex items-center gap-1">
+                <i class="ti ti-user-shield"></i> Admin
+            </p>
+        </div>
+        <div class="w-2 h-2 rounded-full bg-accent flex-shrink-0 pulse-dot"></div>
+    </div>
+
+    <nav class="flex-1 px-3 space-y-1">
+        <p class="text-[10px] font-bold uppercase tracking-widest text-white/30 px-3 pt-2 pb-1">Main</p>
+        <a href="admin_users.php" class="sidebar-link active"><i class="ti ti-users text-base"></i> Manage Users</a>
+        <a href="register.php" class="sidebar-link"><i class="ti ti-user-plus text-base"></i> Register User</a>
+
+        <p class="text-[10px] font-bold uppercase tracking-widest text-white/30 px-3 pt-4 pb-1">Account</p>
+        <a href="profile.php" class="sidebar-link"><i class="ti ti-user-circle text-base"></i> My Profile</a>
+        <a href="support.php" class="sidebar-link"><i class="ti ti-headset text-base"></i> Support</a>
+    </nav>
+
+    <div class="px-3 pb-5 pt-4 border-t border-white/10 bg-navyDark">
+        <a href="login.php?logout=1" id="btn-logout"
+           class="sidebar-link text-red-400 hover:text-red-300 hover:bg-red-500/10">
+            <i class="ti ti-logout text-base"></i> <?php echo $cur['btn_logout']; ?>
+        </a>
+    </div>
+</aside>
+
+<!-- MAIN CONTENT -->
+<main class="flex-1 flex flex-col overflow-auto">
+
+    <!-- Sticky Top Bar -->
+    <header class="bg-white border-b border-slate-200 px-6 py-3.5 flex items-center justify-between shadow-sm sticky top-0 z-10">
+        <div class="flex items-center gap-3">
+            <button id="btn-toggle-sidebar" class="text-gray-500 hover:text-navy transition-colors">
+                <i class="ti ti-menu-2 text-xl"></i>
+            </button>
+            <div>
+                <h1 class="text-navy text-base font-bold"><?php echo $cur['heading']; ?></h1>
+                <p class="text-gray-400 text-xs"><i class="ti ti-calendar-event text-xs"></i> <?php echo date('l, d F Y'); ?></p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <!-- Language Switcher in Header -->
+            <div class="flex items-center gap-2 mr-2">
+                <i class="ti ti-world text-gray-400 text-base"></i>
+                <a href="?lang=en<?php echo !empty($search) ? '&search='.urlencode($search) : ''; ?><?php echo !empty($filter_role) ? '&role='.urlencode($filter_role) : ''; ?><?php echo !empty($filter_status) ? '&status='.urlencode($filter_status) : ''; ?>" 
+                   class="px-2.5 py-0.5 text-xs rounded-full border border-slate-200 transition-all <?php echo $lang === 'en' ? 'bg-accent text-white font-semibold border-accent' : 'text-gray-500 hover:bg-slate-100 hover:text-navy'; ?>">English</a>
+                <a href="?lang=bn<?php echo !empty($search) ? '&search='.urlencode($search) : ''; ?><?php echo !empty($filter_role) ? '&role='.urlencode($filter_role) : ''; ?><?php echo !empty($filter_status) ? '&status='.urlencode($filter_status) : ''; ?>" 
+                   class="px-2.5 py-0.5 text-xs rounded-full border border-slate-200 transition-all <?php echo $lang === 'bn' ? 'bg-accent text-white font-semibold border-accent' : 'text-gray-500 hover:bg-slate-100 hover:text-navy'; ?>">বাংলা</a>
+            </div>
+
+            <button class="relative w-9 h-9 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-gray-500 hover:text-navy transition-all">
+                <i class="ti ti-bell text-base"></i>
+                <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-accent rounded-full pulse-dot"></span>
+            </button>
+
+            <div class="flex items-center gap-2.5 pl-3 border-l border-slate-200">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-[#0F6E56] flex items-center justify-center text-white text-xs font-bold shadow">
+                    <?php echo htmlspecialchars($initials); ?>
+                </div>
+                <div class="hidden sm:block">
+                    <p class="text-navy text-xs font-semibold"><?php echo htmlspecialchars($adminName); ?></p>
+                    <p class="text-gray-400 text-[10px]">Admin</p>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Page Body -->
+    <div class="flex-1 p-6 space-y-6 animate-fade-in">
 
         <!-- System Alerts -->
         <?php if (!empty($msg_success)): ?>
@@ -370,52 +429,80 @@ $cur = $t[$lang];
             </div>
         <?php endif; ?>
 
-        <!-- Stats Bar -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-                <div class="w-12 h-12 bg-navy/5 rounded-xl flex items-center justify-center text-navy text-2xl shadow-sm">
-                    <i class="ti ti-users"></i>
-                </div>
+        <!-- Welcome Banner -->
+        <div class="bg-gradient-to-r from-navy via-navy2 to-[#1a3060] rounded-2xl p-6 text-white relative overflow-hidden shadow-lg">
+            <div class="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <span class="text-xs font-semibold text-slate-400 uppercase tracking-wide"><?php echo $cur['stat_total']; ?></span>
-                    <h3 class="text-2xl font-bold text-navy mt-0.5"><?php echo $total_users; ?></h3>
+                    <p class="text-white/60 text-sm font-medium mb-1 flex items-center gap-1.5">
+                        <i class="ti ti-shield-check text-accent"></i> <?php echo $lang === 'bn' ? 'নিরাপদ অ্যাডমিন পোর্টাল' : 'Secure Admin Portal'; ?>
+                    </p>
+                    <h2 class="text-2xl font-bold">
+                        <?php 
+                        $welcome_text = $lang === 'bn' ? 'স্বাগতম, ' : 'Welcome back, ';
+                        echo $welcome_text . htmlspecialchars(explode(' ', $adminName)[0]); 
+                        ?>!
+                    </h2>
+                    <p class="text-white/55 text-sm mt-1">
+                        <?php echo $cur['subheading']; ?>
+                    </p>
                 </div>
-            </div>
-
-            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-                <div class="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center text-purple-600 text-2xl shadow-sm">
-                    <i class="ti ti-user-shield"></i>
-                </div>
-                <div>
-                    <span class="text-xs font-semibold text-slate-400 uppercase tracking-wide"><?php echo $cur['stat_admins']; ?></span>
-                    <h3 class="text-2xl font-bold text-purple-700 mt-0.5"><?php echo $total_admins; ?></h3>
-                </div>
-            </div>
-
-            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-                <div class="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 text-2xl shadow-sm">
-                    <i class="ti ti-badge"></i>
-                </div>
-                <div>
-                    <span class="text-xs font-semibold text-slate-400 uppercase tracking-wide"><?php echo $cur['stat_staff']; ?></span>
-                    <h3 class="text-2xl font-bold text-blue-700 mt-0.5"><?php echo $total_staff; ?></h3>
-                </div>
-            </div>
-
-            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-                <div class="w-12 h-12 bg-rose-50 rounded-xl flex items-center justify-center text-rose-600 text-2xl shadow-sm">
-                    <i class="ti ti-user-off"></i>
-                </div>
-                <div>
-                    <span class="text-xs font-semibold text-slate-400 uppercase tracking-wide"><?php echo $cur['stat_suspended']; ?></span>
-                    <h3 class="text-2xl font-bold text-rose-700 mt-0.5"><?php echo $total_suspended; ?></h3>
+                <div class="flex items-center gap-3">
+                    <a href="register.php" class="inline-flex items-center gap-2 bg-accent hover:bg-accent-dark text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-all border border-accent">
+                        <i class="ti ti-user-plus"></i> <?php echo $cur['btn_add']; ?>
+                    </a>
                 </div>
             </div>
         </div>
 
-        <!-- Users Search & Table Section -->
+        <!-- Stats Grid -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-slide-up">
+            <div class="stat-card bg-white border border-slate-100 shadow-sm">
+                <div class="flex items-start justify-between mb-3">
+                    <div class="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center">
+                        <i class="ti ti-users text-xl text-blue-600"></i>
+                    </div>
+                    <span class="badge bg-blue-50 text-blue-600"><?php echo $lang === 'bn' ? 'মোট' : 'Total'; ?></span>
+                </div>
+                <p class="text-3xl font-bold text-navy counter" data-target="<?php echo $total_users; ?>"><?php echo $total_users; ?></p>
+                <p class="text-gray-500 text-sm mt-1 font-medium"><?php echo $cur['stat_total']; ?></p>
+            </div>
+
+            <div class="stat-card bg-white border border-slate-100 shadow-sm">
+                <div class="flex items-start justify-between mb-3">
+                    <div class="w-11 h-11 rounded-xl bg-purple-50 flex items-center justify-center">
+                        <i class="ti ti-user-shield text-xl text-purple-600"></i>
+                    </div>
+                    <span class="badge bg-purple-50 text-purple-600"><?php echo $lang === 'bn' ? 'অ্যাডমিন' : 'Admin'; ?></span>
+                </div>
+                <p class="text-3xl font-bold text-navy counter" data-target="<?php echo $total_admins; ?>"><?php echo $total_admins; ?></p>
+                <p class="text-gray-500 text-sm mt-1 font-medium"><?php echo $cur['stat_admins']; ?></p>
+            </div>
+
+            <div class="stat-card bg-white border border-slate-100 shadow-sm">
+                <div class="flex items-start justify-between mb-3">
+                    <div class="w-11 h-11 rounded-xl bg-indigo-50 flex items-center justify-center">
+                        <i class="ti ti-badge text-xl text-indigo-600"></i>
+                    </div>
+                    <span class="badge bg-indigo-50 text-indigo-600"><?php echo $lang === 'bn' ? 'স্টাফ' : 'Staff'; ?></span>
+                </div>
+                <p class="text-3xl font-bold text-navy counter" data-target="<?php echo $total_staff; ?>"><?php echo $total_staff; ?></p>
+                <p class="text-gray-500 text-sm mt-1 font-medium"><?php echo $cur['stat_staff']; ?></p>
+            </div>
+
+            <div class="stat-card bg-gradient-to-br from-navy to-navy2 text-white shadow-sm">
+                <div class="flex items-start justify-between mb-3">
+                    <div class="w-11 h-11 rounded-xl bg-rose-500/10 flex items-center justify-center">
+                        <i class="ti ti-user-off text-xl text-rose-500"></i>
+                    </div>
+                    <span class="badge bg-rose-500/20 text-rose-300"><?php echo $lang === 'bn' ? 'স্থগিত' : 'Suspended'; ?></span>
+                </div>
+                <p class="text-3xl font-bold text-white counter" data-target="<?php echo $total_suspended; ?>"><?php echo $total_suspended; ?></p>
+                <p class="text-white/70 text-sm mt-1 font-medium"><?php echo $cur['stat_suspended']; ?></p>
+            </div>
+        </div>
+
+        <!-- Users Directory Table -->
         <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-            
             <!-- Filters Panel -->
             <div class="p-4 border-b border-slate-100 bg-slate-50/50">
                 <form action="" method="GET" class="flex flex-col md:flex-row gap-3">
@@ -562,140 +649,145 @@ $cur = $t[$lang];
                 </table>
             </div>
         </div>
-    </main>
 
-    <!-- Footer -->
-    <footer class="bg-navy border-t border-white/10 py-6 mt-12">
-        <div class="max-w-7xl mx-auto px-4 text-center">
-            <div class="flex justify-center gap-6 flex-wrap mb-3 text-sm text-[#8FA3C8]">
-                <a href="#" class="hover:underline flex items-center gap-1"><i class="ti ti-lock"></i> <?php echo $cur['privacy']; ?></a>
-                <a href="#" class="hover:underline flex items-center gap-1"><i class="ti ti-file-certificate"></i> <?php echo $cur['terms']; ?></a>
-                <a href="#" class="hover:underline flex items-center gap-1"><i class="ti ti-mail"></i> <?php echo $cur['contact']; ?></a>
-            </div>
-            <p class="text-xs text-[#8FA3C8]">
-                <i class="ti ti-copyright text-[11px] inline-block mr-0.5"></i> <?php echo $cur['copyright']; ?>
-            </p>
+    </div><!-- /page body -->
+</main>
+
+<!-- Hidden POST delete form -->
+<form id="deleteForm" method="POST" action="">
+    <input type="hidden" name="action" value="delete">
+    <input type="hidden" name="id" id="delete_id" value="">
+</form>
+
+<!-- ================= EDIT USER MODAL ================= -->
+<div id="editModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 hidden z-50">
+    <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-100 animate-fade-in">
+        <!-- Modal Header -->
+        <div class="bg-navy px-6 py-4 flex items-center justify-between text-white">
+            <h3 class="font-bold flex items-center gap-2">
+                <i class="ti ti-users-gear text-accent text-lg"></i>
+                <?php echo $cur['title_edit']; ?>
+            </h3>
+            <button onclick="document.getElementById('editModal').classList.add('hidden')" class="text-slate-400 hover:text-white transition-colors">
+                <i class="ti ti-x text-xl"></i>
+            </button>
         </div>
-    </footer>
+        
+        <!-- Modal Body -->
+        <form action="" method="POST" class="p-6 space-y-4">
+            <input type="hidden" name="action" value="update">
+            <input type="hidden" name="id" id="edit_id" value="">
+            
+            <div>
+                <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1"><?php echo $cur['lbl_name']; ?></label>
+                <input type="text" name="full_name" id="edit_full_name" required
+                       class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent text-navy">
+            </div>
 
-    <!-- Hidden POST delete form -->
-    <form id="deleteForm" method="POST" action="">
-        <input type="hidden" name="action" value="delete">
-        <input type="hidden" name="id" id="delete_id" value="">
-    </form>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1"><?php echo $cur['lbl_phone']; ?></label>
+                    <input type="text" name="phone" id="edit_phone" required
+                           class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent text-navy">
+                </div>
 
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1"><?php echo $cur['lbl_nid']; ?></label>
+                    <input type="text" name="national_id" id="edit_national_id" required
+                           class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent text-navy">
+                </div>
+            </div>
 
+            <div>
+                <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1"><?php echo $cur['lbl_email']; ?></label>
+                <input type="email" name="email" id="edit_email"
+                       class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent text-navy">
+            </div>
 
-    <!-- ================= EDIT USER MODAL ================= -->
-    <div id="editModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 hidden z-50">
-        <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-100">
-            <!-- Modal Header -->
-            <div class="bg-navy px-6 py-4 flex items-center justify-between text-white">
-                <h3 class="font-bold flex items-center gap-2">
-                    <i class="ti ti-users-gear text-accent text-lg"></i>
-                    <?php echo $cur['title_edit']; ?>
-                </h3>
-                <button onclick="document.getElementById('editModal').classList.add('hidden')" class="text-slate-400 hover:text-white transition-colors">
-                    <i class="ti ti-x text-xl"></i>
+            <div>
+                <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                    <?php echo $cur['lbl_password']; ?> 
+                    <span class="text-[10px] text-slate-400 font-normal lowercase">(<?php echo $cur['edit_pass_help']; ?>)</span>
+                </label>
+                <input type="password" name="password" id="edit_password"
+                       class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent text-navy"
+                       placeholder="••••••••">
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1"><?php echo $cur['lbl_role']; ?></label>
+                    <select name="role" id="edit_role" required class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent bg-white text-navy font-medium">
+                        <option value="Admin">Admin</option>
+                        <option value="Officer">Officer</option>
+                        <option value="Investigator">Investigator</option>
+                        <option value="Citizen">Citizen</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1"><?php echo $cur['lbl_status']; ?></label>
+                    <select name="status" id="edit_status" required class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent bg-white text-navy font-medium">
+                        <option value="Active"><?php echo $cur['active']; ?></option>
+                        <option value="Suspended"><?php echo $cur['suspended']; ?></option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Footer buttons -->
+            <div class="flex justify-end gap-2 pt-4 border-t border-slate-100">
+                <button type="button" onclick="document.getElementById('editModal').classList.add('hidden')"
+                        class="px-4 py-2 rounded-xl text-sm font-semibold border border-slate-200 hover:bg-slate-50 transition-colors text-slate-700">
+                    <?php echo $cur['btn_cancel']; ?>
+                </button>
+                <button type="submit" class="bg-accent hover:bg-accent-dark text-white font-bold px-4 py-2 rounded-xl text-sm shadow transition-colors">
+                    <?php echo $cur['btn_save']; ?>
                 </button>
             </div>
-            
-            <!-- Modal Body -->
-            <form action="" method="POST" class="p-6 space-y-4">
-                <input type="hidden" name="action" value="update">
-                <input type="hidden" name="id" id="edit_id" value="">
-                
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1"><?php echo $cur['lbl_name']; ?></label>
-                    <input type="text" name="full_name" id="edit_full_name" required
-                           class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent text-navy">
-                </div>
-
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1"><?php echo $cur['lbl_phone']; ?></label>
-                        <input type="text" name="phone" id="edit_phone" required
-                               class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent text-navy">
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1"><?php echo $cur['lbl_nid']; ?></label>
-                        <input type="text" name="national_id" id="edit_national_id" required
-                               class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent text-navy">
-                    </div>
-                </div>
-
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1"><?php echo $cur['lbl_email']; ?></label>
-                    <input type="email" name="email" id="edit_email"
-                           class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent text-navy">
-                </div>
-
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                        <?php echo $cur['lbl_password']; ?> 
-                        <span class="text-[10px] text-slate-400 font-normal lowercase">(<?php echo $cur['edit_pass_help']; ?>)</span>
-                    </label>
-                    <input type="password" name="password" id="edit_password"
-                           class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent text-navy"
-                           placeholder="••••••••">
-                </div>
-
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1"><?php echo $cur['lbl_role']; ?></label>
-                        <select name="role" id="edit_role" required class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent bg-white text-navy font-medium">
-                            <option value="Admin">Admin</option>
-                            <option value="Officer">Officer</option>
-                            <option value="Investigator">Investigator</option>
-                            <option value="Citizen">Citizen</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1"><?php echo $cur['lbl_status']; ?></label>
-                        <select name="status" id="edit_status" required class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent bg-white text-navy font-medium">
-                            <option value="Active"><?php echo $cur['active']; ?></option>
-                            <option value="Suspended"><?php echo $cur['suspended']; ?></option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Footer buttons -->
-                <div class="flex justify-end gap-2 pt-4 border-t border-slate-100">
-                    <button type="button" onclick="document.getElementById('editModal').classList.add('hidden')"
-                            class="px-4 py-2 rounded-xl text-sm font-semibold border border-slate-200 hover:bg-slate-50 transition-colors text-slate-700">
-                        <?php echo $cur['btn_cancel']; ?>
-                    </button>
-                    <button type="submit" class="bg-accent hover:bg-accent-dark text-white font-bold px-4 py-2 rounded-xl text-sm shadow transition-colors">
-                        <?php echo $cur['btn_save']; ?>
-                    </button>
-                </div>
-            </form>
-        </div>
+        </form>
     </div>
+</div>
 
-    <!-- JS Helper Functions -->
-    <script>
-        function openEditModal(user) {
-            document.getElementById('edit_id').value = user.id;
-            document.getElementById('edit_full_name').value = user.full_name;
-            document.getElementById('edit_phone').value = user.phone;
-            document.getElementById('edit_national_id').value = user.national_id;
-            document.getElementById('edit_email').value = user.email;
-            document.getElementById('edit_role').value = user.role;
-            document.getElementById('edit_status').value = user.status;
-            document.getElementById('edit_password').value = '';
-            document.getElementById('editModal').classList.remove('hidden');
-        }
+<!-- JS Helper Functions -->
+<script>
+    document.getElementById('btn-toggle-sidebar')?.addEventListener('click', function() {
+        const s = document.getElementById('sidebar');
+        s.style.width = s.style.width === '0px' ? '256px' : '0px';
+        s.style.overflow = s.style.width === '0px' ? 'hidden' : '';
+    });
 
-        function confirmDelete(userId) {
-            const confirmMsg = "<?php echo $cur['confirm_delete']; ?>";
-            if (confirm(confirmMsg)) {
-                document.getElementById('delete_id').value = userId;
-                document.getElementById('deleteForm').submit();
-            }
+    // Animate counters
+    document.querySelectorAll('.counter').forEach(el => {
+        const target = parseInt(el.dataset.target);
+        if (!target) return;
+        let cur = 0;
+        const step = Math.ceil(target / 20);
+        const t = setInterval(() => {
+            cur = Math.min(cur + step, target);
+            el.textContent = cur;
+            if (cur >= target) clearInterval(t);
+        }, 40);
+    });
+
+    function openEditModal(user) {
+        document.getElementById('edit_id').value = user.id;
+        document.getElementById('edit_full_name').value = user.full_name;
+        document.getElementById('edit_phone').value = user.phone;
+        document.getElementById('edit_national_id').value = user.national_id;
+        document.getElementById('edit_email').value = user.email;
+        document.getElementById('edit_role').value = user.role;
+        document.getElementById('edit_status').value = user.status;
+        document.getElementById('edit_password').value = '';
+        document.getElementById('editModal').classList.remove('hidden');
+    }
+
+    function confirmDelete(userId) {
+        const confirmMsg = "<?php echo $cur['confirm_delete']; ?>";
+        if (confirm(confirmMsg)) {
+            document.getElementById('delete_id').value = userId;
+            document.getElementById('deleteForm').submit();
         }
-    </script>
+    }
+</script>
 </body>
 </html>

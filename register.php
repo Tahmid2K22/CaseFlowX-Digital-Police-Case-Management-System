@@ -159,7 +159,7 @@ $cur = $t[$lang];
                     <i class="ti ti-shield-check"></i>
                 </div>
                 <div>
-                    <h1 class="text-white font-bold leading-none text-base">PoliceNet BD</h1>
+                    <h1 class="text-white font-bold leading-none text-base">CaseFlowX</h1>
                     <span class="text-xs text-accent font-semibold tracking-wide mt-0.5 block">Admin Control Panel</span>
                 </div>
             </div>
