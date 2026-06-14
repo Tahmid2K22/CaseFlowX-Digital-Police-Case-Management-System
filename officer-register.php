@@ -30,7 +30,7 @@
 
   <!-- Breadcrumb -->
   <div class="max-w-3xl mx-auto mb-5 flex items-center gap-2 text-sm text-gray-500">
-    <a href="home.php" class="hover:text-accent transition-colors flex items-center gap-1">
+    <a href="index.php" class="hover:text-accent transition-colors flex items-center gap-1">
       <i class="ti ti-home text-base"></i> Home
     </a>
     <i class="ti ti-chevron-right text-xs"></i>
@@ -228,7 +228,6 @@
         Already have an officer account?
         <a href="officer-login.php" class="text-accent font-semibold hover:underline ml-1">Sign In</a>
       </div>
-      </form>
 
       <!-- Success state -->
       <div id="success-panel" class="hidden text-center py-8">

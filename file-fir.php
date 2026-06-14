@@ -533,7 +533,7 @@ $officer = require_officer();
                                font-semibold flex items-center gap-2 hover:bg-gray-50 transition">
                   <i class="ti ti-plus"></i> File Another FIR
                 </button>
-                <a href="dashboard1.php"
+                <a href="officer-dashboard.php"
                    class="bg-accent hover:bg-accent-dark text-white px-6 py-2.5 rounded-xl text-sm
                           font-semibold flex items-center gap-2 transition">
                   <i class="ti ti-layout-dashboard"></i> Go to Dashboard

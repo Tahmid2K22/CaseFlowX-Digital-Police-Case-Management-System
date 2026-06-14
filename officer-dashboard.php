@@ -1,507 +1,502 @@
 <?php
 /**
- * officer-dashboard.php — CaseFlowX FIR Officer Dashboard
- * Displays assigned FIRs, stats, and unassigned FIR management.
+ * officer-dashboard.php — CaseFlowX Officer Dashboard
+ * Displays complaints and FIRs with actions to Accept, Reject, and Assign Investigators.
  */
-
 require_once __DIR__ . '/db.php';
 
-if (session_status() === PHP_SESSION_NONE) session_start();
-if (empty($_SESSION['logged_in']) || empty($_SESSION['officer_id'])) {
-    header('Location: officer-login.php');
-    exit;
-}
-
 $officer = require_officer();
-
 $db = get_db();
 
-// ── Fetch Stats ─────────────────────────────────────────────────────────
+// ── Stats ───────────────────────────────────────────────────────────────
 $totalAssigned = 0;
 $unassignedCount = 0;
 $underReviewCount = 0;
 $registeredCount = 0;
-
 try {
-    // Total FIRs assigned to this officer
-    $stmt = $db->prepare("SELECT COUNT(*) as cnt FROM fir_records WHERE officer_id = ?");
-    $stmt->execute([$officer['id']]);
-    $totalAssigned = $stmt->fetch()['cnt'];
-
-    // Unassigned FIRs (officer_id = 0 or null)
-    $stmt = $db->prepare("SELECT COUNT(*) as cnt FROM fir_records WHERE officer_id = 0 OR officer_id IS NULL");
-    $stmt->execute();
-    $unassignedCount = $stmt->fetch()['cnt'];
-
-    // Under Review FIRs assigned to this officer
-    $stmt = $db->prepare("SELECT COUNT(*) as cnt FROM fir_records WHERE officer_id = ? AND status = 'Under Review'");
-    $stmt->execute([$officer['id']]);
-    $underReviewCount = $stmt->fetch()['cnt'];
-
-    // Registered FIRs assigned to this officer
-    $stmt = $db->prepare("SELECT COUNT(*) as cnt FROM fir_records WHERE officer_id = ? AND status = 'Registered'");
-    $stmt->execute([$officer['id']]);
-    $registeredCount = $stmt->fetch()['cnt'];
+    $totalAssigned = (int) $db->query("SELECT COUNT(*) FROM cases WHERE officer_id IS NOT NULL")->fetchColumn();
+    $unassignedCount = (int) $db->query("SELECT COUNT(*) FROM cases WHERE officer_id IS NULL AND (status = 'Submitted' OR status = 'open')")->fetchColumn();
+    $underReviewCount = (int) $db->query("SELECT COUNT(*) FROM cases WHERE (status = 'Under Review' OR status = 'in_progress')")->fetchColumn();
+    $registeredCount = (int) $db->query("SELECT COUNT(*) FROM cases WHERE (status = 'Registered' OR status = 'resolved')")->fetchColumn();
 } catch (PDOException $e) {
     error_log("Dashboard stats error: " . $e->getMessage());
 }
 
-// ── Fetch Assigned FIRs ────────────────────────────────────────────────
-$assignedFirs = [];
+// ── Assigned cases ──────────────────────────────────────────────────────
+$assignedCases = [];
 try {
-    $stmt = $db->prepare("
-        SELECT f.*, 
-               (SELECT COUNT(*) FROM fir_evidence WHERE fir_id = f.id) as evidence_count
-        FROM fir_records f
-        WHERE f.officer_id = ?
-        ORDER BY f.created_at DESC
+    $stmt = $db->query("
+        SELECT c.*, o.full_name as officer_name,
+               (SELECT COUNT(*) FROM fir_evidence WHERE case_id = c.id) as evidence_count
+        FROM cases c
+        LEFT JOIN officers o ON c.officer_id = o.id
+        WHERE c.officer_id IS NOT NULL
+        ORDER BY c.created_at DESC
     ");
-    $stmt->execute([$officer['id']]);
-    $assignedFirs = $stmt->fetchAll();
+    $assignedCases = $stmt->fetchAll();
 } catch (PDOException $e) {
-    error_log("Dashboard FIRs error: " . $e->getMessage());
+    error_log("Dashboard assigned cases error: " . $e->getMessage());
 }
 
-// ── Fetch Unassigned FIRs ──────────────────────────────────────────────
-$unassignedFirs = [];
+// ── Unassigned cases ────────────────────────────────────────────────────
+$unassignedCases = [];
 try {
-    $stmt = $db->prepare("
-        SELECT f.*,
-               (SELECT COUNT(*) FROM fir_evidence WHERE fir_id = f.id) as evidence_count
-        FROM fir_records f
-        WHERE f.officer_id = 0 OR f.officer_id IS NULL
-        ORDER BY f.created_at DESC
+    $stmt = $db->query("
+        SELECT c.*, ct.full_name as citizen_name
+        FROM cases c
+        LEFT JOIN citizens ct ON c.citizen_id = ct.id
+        WHERE c.officer_id IS NULL AND (c.status = 'Submitted' OR c.status = 'open')
+        ORDER BY c.created_at DESC
     ");
-    $stmt->execute();
-    $unassignedFirs = $stmt->fetchAll();
+    $unassignedCases = $stmt->fetchAll();
 } catch (PDOException $e) {
-    error_log("Dashboard unassigned FIRs error: " . $e->getMessage());
-}
-
-// ── Fetch available officers for assignment dropdown ──────────────────
-$allOfficers = [];
-try {
-    $stmt = $db->prepare("
-        SELECT id, badge_number, full_name, role 
-        FROM officers 
-        WHERE status = 'active' AND id != ?
-        ORDER BY full_name ASC
-    ");
-    $stmt->execute([$officer['id']]);
-    $allOfficers = $stmt->fetchAll();
-} catch (PDOException $e) {
-    error_log("Dashboard officers list error: " . $e->getMessage());
+    error_log("Dashboard unassigned cases error: " . $e->getMessage());
 }
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FIR Officer Dashboard — CaseFlowX</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        navy:   '#1B2A4A',
-                        accent: '#1D9E75',
-                        'accent-dark': '#0F6E56',
-                    }
-                }
-            }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Officer Dashboard — CaseFlowX</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          navy:   '#1B2A4A',
+          accent: '#1D9E75',
+          'accent-dark': '#0F6E56',
         }
-    </script>
+      }
+    }
+  }
+</script>
 </head>
-<body class="min-h-screen bg-[#F4F6F9]">
+<body class="min-h-screen bg-[#F4F6F9] pb-12">
 
-    <!-- ── Header ────────────────────────────────────────────────────── -->
-    <header class="bg-navy text-white">
-        <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-accent flex items-center justify-center">
-                    <i class="ti ti-shield text-xl"></i>
-                </div>
-                <div>
-                    <h1 class="font-bold text-lg leading-tight">FIR Officer Dashboard</h1>
-                    <p class="text-white/55 text-xs">CaseFlowX — Digital FIR Filing System</p>
-                </div>
-            </div>
-            <div class="flex items-center gap-4">
-                <a href="officer-profile.php" class="text-sm text-white/70 hover:text-white flex items-center gap-1.5 transition">
-                    <i class="ti ti-user text-base"></i>
-                    <span class="hidden sm:inline">Profile</span>
-                </a>
-                <a href="logout.php" class="text-sm text-white/70 hover:text-red-400 flex items-center gap-1.5 transition">
-                    <i class="ti ti-logout text-base"></i>
-                    <span class="hidden sm:inline">Logout</span>
-                </a>
-            </div>
-        </div>
-    </header>
+<!-- Premium Header -->
+<header class="bg-navy text-white shadow-md">
+  <div class="max-w-7xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-accent flex items-center justify-center text-white text-xl shadow">
+        <i class="ti ti-shield"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold leading-none">CaseFlowX</h1>
+        <p class="text-[11px] text-white/50 mt-0.5">Digital Police Case Management System</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-5 text-sm">
+      <div class="hidden sm:block text-right">
+        <div class="font-semibold text-white"><?= htmlspecialchars($officer['full_name']) ?></div>
+        <div class="text-[11px] text-white/55">Badge: <?= htmlspecialchars($officer['badge_number']) ?> · Station: <?= htmlspecialchars($officer['station_code']) ?></div>
+      </div>
+      <div class="h-6 w-px bg-white/20 hidden sm:block"></div>
+      <a href="file-fir.php" class="bg-accent hover:bg-accent-dark text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shadow">
+        <i class="ti ti-file-plus"></i> File FIR
+      </a>
+      <a href="logout.php" class="text-white/70 hover:text-red-400 transition flex items-center gap-1 text-xs">
+        <i class="ti ti-logout text-sm"></i> Logout
+      </a>
+    </div>
+  </div>
+</header>
 
-    <!-- ── Main Content ──────────────────────────────────────────────── -->
-    <main class="max-w-7xl mx-auto px-4 py-6">
+<main class="max-w-7xl mx-auto px-4 py-6">
 
-        <!-- Breadcrumb -->
-        <div class="mb-5 flex items-center gap-2 text-sm text-gray-500">
-            <a href="dashboard1.php" class="hover:text-accent transition-colors flex items-center gap-1">
-                <i class="ti ti-home text-base"></i> Home
-            </a>
-            <i class="ti ti-chevron-right text-xs"></i>
-            <span class="text-gray-700 font-medium">Officer Dashboard</span>
-        </div>
+  <!-- Stats Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex items-start gap-4">
+      <div class="w-12 h-12 rounded-xl bg-navy/10 flex items-center justify-center text-navy text-2xl flex-shrink-0">
+        <i class="ti ti-file-text"></i>
+      </div>
+      <div>
+        <p class="text-gray-500 text-xs font-medium uppercase tracking-wide">Total Assigned</p>
+        <p class="text-navy text-2xl font-bold mt-1"><?= number_format($totalAssigned) ?></p>
+      </div>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex items-start gap-4">
+      <div class="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600 text-2xl flex-shrink-0">
+        <i class="ti ti-inbox"></i>
+      </div>
+      <div>
+        <p class="text-gray-500 text-xs font-medium uppercase tracking-wide">Unassigned</p>
+        <p class="text-orange-600 text-2xl font-bold mt-1"><?= number_format($unassignedCount) ?></p>
+      </div>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex items-start gap-4">
+      <div class="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 text-2xl flex-shrink-0">
+        <i class="ti ti-eye"></i>
+      </div>
+      <div>
+        <p class="text-gray-500 text-xs font-medium uppercase tracking-wide">Under Review</p>
+        <p class="text-blue-600 text-2xl font-bold mt-1"><?= number_format($underReviewCount) ?></p>
+      </div>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex items-start gap-4">
+      <div class="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center text-green-600 text-2xl flex-shrink-0">
+        <i class="ti ti-circle-check"></i>
+      </div>
+      <div>
+        <p class="text-gray-500 text-xs font-medium uppercase tracking-wide">Registered</p>
+        <p class="text-green-600 text-2xl font-bold mt-1"><?= number_format($registeredCount) ?></p>
+      </div>
+    </div>
+  </div>
 
-        <!-- Welcome Header -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
-            <div class="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div class="w-14 h-14 rounded-2xl bg-accent/10 flex items-center justify-center text-accent text-3xl">
-                    <i class="ti ti-user-circle"></i>
-                </div>
-                <div>
-                    <h2 class="text-navy text-xl font-bold">Welcome, <?= htmlspecialchars($officer['full_name']) ?></h2>
-                    <p class="text-gray-500 text-sm mt-0.5">
-                        Badge No: <span class="font-semibold text-navy"><?= htmlspecialchars($officer['badge_number']) ?></span>
-                        &nbsp;·&nbsp;
-                        Station: <span class="font-semibold text-navy"><?= htmlspecialchars($officer['station_code']) ?></span>
-                        &nbsp;·&nbsp;
-                        Role: <span class="font-semibold text-accent"><?= htmlspecialchars($officer['role']) ?></span>
-                    </p>
-                </div>
-            </div>
-        </div>
+  <!-- Unassigned Cases -->
+  <?php if (count($unassignedCases) > 0): ?>
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+    <div class="bg-orange-50 border-b border-orange-100 px-6 py-4 flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg bg-orange-500 flex items-center justify-center text-white text-lg"><i class="ti ti-inbox"></i></div>
+      <div>
+        <h2 class="text-navy font-semibold text-base">Unassigned complaints / FIRs</h2>
+        <p class="text-gray-400 text-xs">New complaints awaiting acceptance & investigator assignment</p>
+      </div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-left">
+        <thead class="bg-[#f8f9fc]">
+          <tr>
+            <th class="px-6 py-3.5 text-xs font-semibold text-gray-500 uppercase">Case / FIR #</th>
+            <th class="px-6 py-3.5 text-xs font-semibold text-gray-500 uppercase">Title</th>
+            <th class="px-6 py-3.5 text-xs font-semibold text-gray-500 uppercase">Complainant</th>
+            <th class="px-6 py-3.5 text-xs font-semibold text-gray-500 uppercase">Date</th>
+            <th class="px-6 py-3.5 text-xs font-semibold text-gray-500 uppercase">Priority</th>
+            <th class="px-6 py-3.5 text-right text-xs font-semibold text-gray-500 uppercase">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          <?php foreach ($unassignedCases as $case): ?>
+          <tr id="unassigned-row-<?= (int)$case['id'] ?>" class="hover:bg-gray-50/50 transition-colors">
+            <td class="px-6 py-4 text-sm font-medium text-navy">
+              <div><?= htmlspecialchars($case['case_number']) ?></div>
+              <?php if (!empty($case['fir_number'])): ?>
+                <div class="text-[11px] text-gray-400 font-normal mt-0.5"><?= htmlspecialchars($case['fir_number']) ?></div>
+              <?php endif; ?>
+            </td>
+            <td class="px-6 py-4 text-sm text-gray-600 font-medium"><?= htmlspecialchars($case['title']) ?></td>
+            <td class="px-6 py-4 text-sm text-gray-600"><?= htmlspecialchars($case['citizen_name'] ?? $case['complainant_name'] ?? '—') ?></td>
+            <td class="px-6 py-4 text-sm text-gray-500"><?= date('M d, Y', strtotime($case['created_at'])) ?></td>
+            <td class="px-6 py-4"><?= priorityBadge($case['priority']) ?></td>
+            <td class="px-6 py-4 text-right">
+              <div class="flex items-center justify-end gap-2">
+                <button onclick="acceptCase(<?= (int)$case['id'] ?>, this)" class="bg-accent/15 text-accent hover:bg-accent hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition">
+                  <i class="ti ti-check"></i> Accept
+                </button>
+                <button onclick="rejectCase(<?= (int)$case['id'] ?>, this)" class="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition">
+                  <i class="ti ti-x"></i> Reject
+                </button>
+              </div>
+            </td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <?php else: ?>
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center mb-6">
+    <div class="w-16 h-16 bg-gray-100 text-gray-400 rounded-full flex items-center justify-center mx-auto mb-3">
+      <i class="ti ti-inbox text-3xl"></i>
+    </div>
+    <h3 class="text-navy font-semibold text-lg">No unassigned cases</h3>
+    <p class="text-gray-400 text-sm">All complaints have been reviewed or accepted.</p>
+  </div>
+  <?php endif; ?>
 
-        <!-- Stats Cards (4 columns) -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <!-- Total FIRs Assigned -->
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex items-start gap-4">
-                <div class="w-12 h-12 rounded-xl bg-navy/10 flex items-center justify-center text-navy text-2xl flex-shrink-0">
-                    <i class="ti ti-file-text"></i>
-                </div>
-                <div>
-                    <p class="text-gray-500 text-xs font-medium uppercase tracking-wide">Total FIRs Assigned</p>
-                    <p class="text-navy text-2xl font-bold mt-1"><?= number_format($totalAssigned) ?></p>
-                </div>
-            </div>
-
-            <!-- Unassigned FIRs -->
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex items-start gap-4">
-                <div class="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600 text-2xl flex-shrink-0">
-                    <i class="ti ti-inbox"></i>
-                </div>
-                <div>
-                    <p class="text-gray-500 text-xs font-medium uppercase tracking-wide">Unassigned FIRs</p>
-                    <p class="text-orange-600 text-2xl font-bold mt-1"><?= number_format($unassignedCount) ?></p>
-                </div>
-            </div>
-
-            <!-- Under Review -->
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex items-start gap-4">
-                <div class="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 text-2xl flex-shrink-0">
-                    <i class="ti ti-eye"></i>
-                </div>
-                <div>
-                    <p class="text-gray-500 text-xs font-medium uppercase tracking-wide">Under Review</p>
-                    <p class="text-blue-600 text-2xl font-bold mt-1"><?= number_format($underReviewCount) ?></p>
-                </div>
-            </div>
-
-            <!-- Registered -->
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex items-start gap-4">
-                <div class="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center text-green-600 text-2xl flex-shrink-0">
-                    <i class="ti ti-circle-check"></i>
-                </div>
-                <div>
-                    <p class="text-gray-500 text-xs font-medium uppercase tracking-wide">Registered</p>
-                    <p class="text-green-600 text-2xl font-bold mt-1"><?= number_format($registeredCount) ?></p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Unassigned FIRs Section (NEW arrivals from citizens) -->
-        <?php if (count($unassignedFirs) > 0): ?>
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
-            <div class="bg-orange-50 border-b border-orange-100 px-6 py-4 flex items-center gap-3">
-                <div class="w-9 h-9 rounded-lg bg-orange-500 flex items-center justify-center text-white text-lg">
-                    <i class="ti ti-inbox"></i>
-                </div>
-                <div>
-                    <h3 class="text-navy font-bold">Unassigned FIRs — New Arrivals</h3>
-                    <p class="text-gray-500 text-xs">FIRs waiting to be claimed by an officer</p>
-                </div>
-                <span class="ml-auto bg-orange-500 text-white text-xs font-bold px-2.5 py-1 rounded-full">
-                    <?= count($unassignedFirs) ?>
+  <!-- Assigned Cases -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <div class="bg-navy px-6 py-4 flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg bg-accent flex items-center justify-center text-white text-lg"><i class="ti ti-folder"></i></div>
+      <div>
+        <h2 class="text-white font-semibold text-base">Assigned & Registered Cases</h2>
+        <p class="text-white/55 text-xs">Under police jurisdiction and assigned for active investigation</p>
+      </div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-left">
+        <thead class="bg-[#f8f9fc]">
+          <tr>
+            <th class="px-6 py-3.5 text-xs font-semibold text-gray-500 uppercase">Case / FIR #</th>
+            <th class="px-6 py-3.5 text-xs font-semibold text-gray-500 uppercase">Title</th>
+            <th class="px-6 py-3.5 text-xs font-semibold text-gray-500 uppercase">Assigned Officer</th>
+            <th class="px-6 py-3.5 text-xs font-semibold text-gray-500 uppercase">Investigating Officer</th>
+            <th class="px-6 py-3.5 text-xs font-semibold text-gray-500 uppercase">Status</th>
+            <th class="px-6 py-3.5 text-xs font-semibold text-gray-500 uppercase">Priority</th>
+            <th class="px-6 py-3.5 text-right text-xs font-semibold text-gray-500 uppercase">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          <?php foreach ($assignedCases as $case): 
+            $isAssignedToMe = ((int)$case['officer_id'] === (int)$officer['id']);
+          ?>
+          <tr class="hover:bg-gray-50/50 transition-colors">
+            <td class="px-6 py-4 text-sm font-medium text-navy">
+              <div><?= htmlspecialchars($case['case_number']) ?></div>
+              <?php if (!empty($case['fir_number'])): ?>
+                <div class="text-[11px] text-gray-400 font-normal mt-0.5"><?= htmlspecialchars($case['fir_number']) ?></div>
+              <?php endif; ?>
+            </td>
+            <td class="px-6 py-4 text-sm text-gray-600 font-medium"><?= htmlspecialchars($case['title']) ?></td>
+            <td class="px-6 py-4 text-sm text-gray-600">
+              <?php if ($isAssignedToMe): ?>
+                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-navy/10 text-navy">
+                  <i class="ti ti-user-check text-xs"></i> Assigned to Me
                 </span>
-            </div>
-
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead class="bg-gray-50 border-b border-gray-100">
-                        <tr>
-                            <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">FIR Number</th>
-                            <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Complainant</th>
-                            <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Incident Date</th>
-                            <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Location</th>
-                            <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Priority</th>
-                            <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-50">
-                        <?php foreach ($unassignedFirs as $fir): ?>
-                        <tr class="hover:bg-gray-50/50 transition-colors" id="unassigned-row-<?= $fir['id'] ?>">
-                            <td class="px-6 py-3.5 font-medium text-navy"><?= htmlspecialchars($fir['fir_number']) ?></td>
-                            <td class="px-6 py-3.5 text-gray-700"><?= htmlspecialchars($fir['complainant_name']) ?></td>
-                            <td class="px-6 py-3.5 text-gray-600"><?= htmlspecialchars($fir['incident_date']) ?></td>
-                            <td class="px-6 py-3.5 text-gray-600 max-w-[200px] truncate" title="<?= htmlspecialchars($fir['incident_location']) ?>">
-                                <?= htmlspecialchars($fir['incident_location']) ?>
-                            </td>
-                            <td class="px-6 py-3.5">
-                                <?php
-                                $priority_class = match($fir['priority']) {
-                                    'high' => 'bg-red-100 text-red-700',
-                                    'medium' => 'bg-yellow-100 text-yellow-700',
-                                    'low' => 'bg-gray-100 text-gray-600',
-                                    default => 'bg-gray-100 text-gray-600',
-                                };
-                                ?>
-                                <span class="px-2 py-0.5 rounded-full text-xs font-medium <?= $priority_class ?>">
-                                    <?= ucfirst(htmlspecialchars($fir['priority'])) ?>
-                                </span>
-                            </td>
-                            <td class="px-6 py-3.5">
-                                <div class="flex items-center gap-2 flex-wrap">
-                                    <!-- Accept (assign to self) -->
-                                    <button onclick="acceptFir(<?= $fir['id'] ?>)"
-                                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-dark text-white text-xs font-medium transition"
-                                            id="accept-btn-<?= $fir['id'] ?>">
-                                        <i class="ti ti-check text-sm"></i> Accept
-                                    </button>
-
-                                    <!-- Assign to Officer dropdown -->
-                                    <div class="relative inline-block">
-                                        <select onchange="assignFir(<?= $fir['id'] ?>, this.value)"
-                                                class="appearance-none bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium pl-3 pr-8 py-1.5 rounded-lg cursor-pointer transition border-0 focus:outline-none focus:ring-2 focus:ring-accent/30">
-                                            <option value="">Assign to Officer...</option>
-                                            <?php foreach ($allOfficers as $opt): ?>
-                                                <option value="<?= $opt['id'] ?>">
-                                                    <?= htmlspecialchars($opt['full_name']) ?> (<?= htmlspecialchars($opt['badge_number']) ?>)
-                                                </option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                        <i class="ti ti-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none"></i>
-                                    </div>
-
-                                    <!-- View Details -->
-                                    <a href="fir-details.php?id=<?= $fir['id'] ?>"
-                                       class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium transition">
-                                        <i class="ti ti-eye text-sm"></i> View
-                                    </a>
-                                </div>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-        <?php endif; ?>
-
-        <!-- My Assigned FIRs Table -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div class="bg-navy px-6 py-4 flex items-center gap-3">
-                <div class="w-9 h-9 rounded-lg bg-accent flex items-center justify-center text-white text-lg">
-                    <i class="ti ti-files"></i>
+              <?php else: ?>
+                <span class="text-gray-700"><?= htmlspecialchars($case['officer_name'] ?? '—') ?></span>
+              <?php endif; ?>
+            </td>
+            <td class="px-6 py-4 text-sm">
+              <?php if (!empty($case['investigating_officer'])): ?>
+                <div class="flex items-center gap-1.5 text-gray-800 font-semibold">
+                  <i class="ti ti-user-shield text-accent text-base"></i>
+                  <span><?= htmlspecialchars($case['investigating_officer']) ?></span>
                 </div>
-                <div>
-                    <h3 class="text-white font-bold">My Assigned FIRs</h3>
-                    <p class="text-white/55 text-xs">All FIRs assigned to your account</p>
-                </div>
-                <span class="ml-auto bg-white/20 text-white text-xs font-bold px-2.5 py-1 rounded-full">
-                    <?= count($assignedFirs) ?>
-                </span>
-            </div>
+              <?php else: ?>
+                <span class="text-gray-400 italic">Not Assigned</span>
+              <?php endif; ?>
+            </td>
+            <td class="px-6 py-4"><?= statusBadge($case['status']) ?></td>
+            <td class="px-6 py-4"><?= priorityBadge($case['priority']) ?></td>
+            <td class="px-6 py-4 text-right">
+              <div class="flex items-center justify-end gap-3">
+                <a href="case-details.php?id=<?= (int)$case['id'] ?>" class="text-accent hover:text-accent-dark font-bold text-xs flex items-center gap-0.5">
+                  <i class="ti ti-external-link"></i> View Details
+                </a>
+                <?php if ($isAssignedToMe): ?>
+                  <button onclick="openAssignModal(<?= (int)$case['id'] ?>, '<?= htmlspecialchars($case['investigating_officer'] ?? '') ?>')" class="bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition">
+                    <i class="ti ti-user-shield"></i> Assign
+                  </button>
+                <?php endif; ?>
+              </div>
+            </td>
+          </tr>
+          <?php endforeach; ?>
+          <?php if (empty($assignedCases)): ?>
+          <tr>
+            <td colspan="7" class="px-6 py-12 text-center text-gray-400">
+              No assigned or registered cases found.
+            </td>
+          </tr>
+          <?php endif; ?>
+        </tbody>
+      </table>
+    </div>
+  </div>
 
-            <?php if (empty($assignedFirs)): ?>
-                <div class="py-16 text-center">
-                    <div class="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4 text-gray-400 text-3xl">
-                        <i class="ti ti-file-x"></i>
-                    </div>
-                    <h4 class="text-gray-600 font-medium mb-1">No FIRs Assigned</h4>
-                    <p class="text-gray-400 text-sm">Accept unassigned FIRs above to get started.</p>
-                </div>
-            <?php else: ?>
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead class="bg-gray-50 border-b border-gray-100">
-                        <tr>
-                            <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">FIR Number</th>
-                            <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Complainant</th>
-                            <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Incident Date</th>
-                            <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Location</th>
-                            <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                            <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Priority</th>
-                            <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Evidence</th>
-                            <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-50">
-                        <?php foreach ($assignedFirs as $fir): ?>
-                        <tr class="hover:bg-gray-50/50 transition-colors">
-                            <td class="px-6 py-3.5 font-medium text-navy"><?= htmlspecialchars($fir['fir_number']) ?></td>
-                            <td class="px-6 py-3.5 text-gray-700"><?= htmlspecialchars($fir['complainant_name']) ?></td>
-                            <td class="px-6 py-3.5 text-gray-600"><?= htmlspecialchars($fir['incident_date']) ?></td>
-                            <td class="px-6 py-3.5 text-gray-600 max-w-[180px] truncate" title="<?= htmlspecialchars($fir['incident_location']) ?>">
-                                <?= htmlspecialchars($fir['incident_location']) ?>
-                            </td>
-                            <td class="px-6 py-3.5">
-                                <?php
-                                $status_class = match($fir['status']) {
-                                    'Draft' => 'bg-gray-100 text-gray-600',
-                                    'Submitted' => 'bg-blue-100 text-blue-700',
-                                    'Under Review' => 'bg-orange-100 text-orange-700',
-                                    'Registered' => 'bg-green-100 text-green-700',
-                                    'Rejected' => 'bg-red-100 text-red-700',
-                                    default => 'bg-gray-100 text-gray-600',
-                                };
-                                ?>
-                                <span class="px-2.5 py-1 rounded-full text-xs font-medium <?= $status_class ?>">
-                                    <?= htmlspecialchars($fir['status']) ?>
-                                </span>
-                            </td>
-                            <td class="px-6 py-3.5">
-                                <?php
-                                $priority_class = match($fir['priority']) {
-                                    'high' => 'bg-red-100 text-red-700',
-                                    'medium' => 'bg-yellow-100 text-yellow-700',
-                                    'low' => 'bg-gray-100 text-gray-600',
-                                    default => 'bg-gray-100 text-gray-600',
-                                };
-                                ?>
-                                <span class="px-2 py-0.5 rounded-full text-xs font-medium <?= $priority_class ?>">
-                                    <?= ucfirst(htmlspecialchars($fir['priority'])) ?>
-                                </span>
-                            </td>
-                            <td class="px-6 py-3.5">
-                                <span class="inline-flex items-center gap-1 text-gray-500 text-xs">
-                                    <i class="ti ti-paperclip text-sm"></i>
-                                    <?= intval($fir['evidence_count']) ?> file(s)
-                                </span>
-                            </td>
-                            <td class="px-6 py-3.5">
-                                <div class="flex items-center gap-2 flex-wrap">
-                                    <a href="fir-details.php?id=<?= $fir['id'] ?>"
-                                       class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-navy hover:bg-navy/90 text-white text-xs font-medium transition">
-                                        <i class="ti ti-eye text-sm"></i> View
-                                    </a>
-                                    <?php if ($fir['status'] === 'Draft' || $fir['status'] === 'Submitted'): ?>
-                                    <a href="file-fir.php?edit=<?= $fir['id'] ?>"
-                                       class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-dark text-white text-xs font-medium transition">
-                                        <i class="ti ti-edit text-sm"></i> Edit
-                                    </a>
-                                    <?php endif; ?>
-                                </div>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-            <?php endif; ?>
-        </div>
+</main>
 
-    </main>
+<!-- Assign Investigator Modal -->
+<div id="assign-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-xl animate-in fade-in duration-200">
+    <div class="bg-navy px-6 py-4 flex items-center justify-between">
+      <h3 class="text-white font-semibold text-lg flex items-center gap-2">
+        <i class="ti ti-user-shield"></i> Assign Investigator
+      </h3>
+      <button onclick="closeAssignModal()" class="text-white/75 hover:text-white transition">
+        <i class="ti ti-x text-lg"></i>
+      </button>
+    </div>
+    <form id="assign-form" class="p-6 space-y-4">
+      <input type="hidden" id="modal-case-id" name="case_id">
+      <input type="hidden" id="modal-action" name="action" value="assign_investigator">
+      
+      <div>
+        <label for="investigating_officer_select" class="block text-xs font-semibold text-gray-600 mb-1.5">
+          Select Investigator <span class="text-red-400">*</span>
+        </label>
+        <select id="investigating_officer_select" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent bg-white" onchange="syncInvestigatorName()">
+          <option value="">-- Choose Predefined Investigator --</option>
+          <option value="Sub-Inspector Amit Hasan">Sub-Inspector Amit Hasan (Badge: SI-902)</option>
+          <option value="Sub-Inspector Sabrina Khan">Sub-Inspector Sabrina Khan (Badge: SI-411)</option>
+          <option value="Inspector Rafiqul Islam">Inspector Rafiqul Islam (Badge: INS-203)</option>
+          <option value="Sub-Inspector Joynal Abedin">Sub-Inspector Joynal Abedin (Badge: SI-108)</option>
+          <option value="custom">-- Type Custom Name --</option>
+        </select>
+      </div>
 
-    <!-- ── Footer ────────────────────────────────────────────────────── -->
-    <footer class="mt-8 py-4 text-center text-xs text-gray-400">
-        <p>CaseFlowX — Digital FIR Filing System &copy; <?= date('Y') ?></p>
-    </footer>
+      <div id="custom-investigator-container" class="hidden">
+        <label for="investigating_officer" class="block text-xs font-semibold text-gray-600 mb-1.5">
+          Investigating Officer Name <span class="text-red-400">*</span>
+        </label>
+        <input type="text" id="investigating_officer" name="investigating_officer" placeholder="Enter investigator name" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
+      </div>
 
-</body>
-</html>
+      <div class="flex justify-end gap-3 pt-2">
+        <button type="button" onclick="closeAssignModal()" class="px-4 py-2 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">
+          Cancel
+        </button>
+        <button type="submit" class="bg-accent hover:bg-accent-dark text-white px-5 py-2 rounded-xl text-sm font-semibold transition">
+          Confirm & Assign
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<?php
+function statusBadge(string $status): string {
+    $map = [
+        'Submitted'     => ['bg-blue-50 text-blue-700 border-blue-200', 'ti-send', 'Submitted'],
+        'open'          => ['bg-blue-50 text-blue-700 border-blue-200', 'ti-send', 'Submitted'],
+        'Under Review'  => ['bg-orange-50 text-orange-700 border-orange-200', 'ti-eye', 'Under Review'],
+        'Registered'    => ['bg-green-50 text-green-700 border-green-200', 'ti-circle-check', 'Registered'],
+        'Rejected'      => ['bg-red-50 text-red-700 border-red-200', 'ti-x', 'Rejected'],
+    ];
+    [$cls, $ico, $lbl] = $map[$status] ?? [$map['Submitted'][0], $map['Submitted'][1], $status];
+    return "<span class=\"inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border {$cls}\"><i class=\"ti {$ico}\"></i> {$lbl}</span>";
+}
+function priorityBadge(string $priority): string {
+    $map = [
+        'low'    => ['bg-gray-100 text-gray-600 border-gray-200', 'Low'],
+        'medium' => ['bg-orange-50 text-orange-700 border-orange-200', 'Medium'],
+        'high'   => ['bg-red-50 text-red-700 border-red-200', 'High'],
+    ];
+    [$cls, $lbl] = $map[$priority] ?? [$map['low'][0], ucfirst($priority)];
+    return "<span class=\"inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold border {$cls}\">{$lbl}</span>";
+}
+?>
 
 <script>
-/**
- * Accept an unassigned FIR (assign to self)
- */
-async function acceptFir(firId) {
-    const btn = document.getElementById('accept-btn-' + firId);
-    if (!btn) return;
-
-    const originalHTML = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="ti ti-loader-2 animate-spin text-sm"></i> Accepting...';
-
-    try {
-        const formData = new FormData();
-        formData.append('action', 'accept');
-        formData.append('fir_id', firId);
-
-        const resp = await fetch('api/fir.php', {
-            method: 'POST',
-            body: formData
-        });
-
-        const data = await resp.json();
-
-        if (data.success) {
-            // Remove the row from unassigned table
-            const row = document.getElementById('unassigned-row-' + firId);
-            if (row) {
-                row.style.transition = 'opacity 0.3s';
-                row.style.opacity = '0';
-                setTimeout(() => row.remove(), 300);
-            }
-            // Reload page after brief delay to refresh all data
-            setTimeout(() => location.reload(), 500);
-        } else {
-            alert(data.message || 'Failed to accept FIR');
-            btn.disabled = false;
-            btn.innerHTML = originalHTML;
-        }
-    } catch (err) {
-        alert('Network error. Please try again.');
-        btn.disabled = false;
-        btn.innerHTML = originalHTML;
+async function acceptCase(caseId, btn) {
+  btn.disabled = true;
+  const oldText = btn.innerHTML;
+  btn.innerHTML = '<i class="ti ti-loader-2 animate-spin"></i> Accepting…';
+  try {
+    const fd = new FormData();
+    fd.append('action', 'accept');
+    fd.append('case_id', caseId);
+    const res = await fetch('api/case.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('unassigned-row-' + caseId)?.remove();
+      location.reload();
+    } else {
+      alert(data.message || 'Failed to accept case');
+      btn.disabled = false;
+      btn.innerHTML = oldText;
     }
+  } catch (e) {
+    alert('Network error');
+    btn.disabled = false;
+    btn.innerHTML = oldText;
+  }
 }
 
-/**
- * Assign an unassigned FIR to a specific officer
- */
-async function assignFir(firId, officerId) {
-    if (!officerId) return;
-
-    try {
-        const formData = new FormData();
-        formData.append('action', 'accept');
-        formData.append('fir_id', firId);
-        formData.append('assign_to_officer', officerId);
-
-        const resp = await fetch('api/fir.php', {
-            method: 'POST',
-            body: formData
-        });
-
-        const data = await resp.json();
-
-        if (data.success) {
-            // Remove the row from unassigned table
-            const row = document.getElementById('unassigned-row-' + firId);
-            if (row) {
-                row.style.transition = 'opacity 0.3s';
-                row.style.opacity = '0';
-                setTimeout(() => row.remove(), 300);
-            }
-            setTimeout(() => location.reload(), 500);
-        } else {
-            alert(data.message || 'Failed to assign FIR');
-            location.reload();
-        }
-    } catch (err) {
-        alert('Network error. Please try again.');
-        location.reload();
+async function rejectCase(caseId, btn) {
+  if (!confirm('Are you sure you want to reject this case?')) return;
+  btn.disabled = true;
+  const oldText = btn.innerHTML;
+  btn.innerHTML = '<i class="ti ti-loader-2 animate-spin"></i> Rejecting…';
+  try {
+    const fd = new FormData();
+    fd.append('action', 'reject');
+    fd.append('case_id', caseId);
+    const res = await fetch('api/case.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('unassigned-row-' + caseId)?.remove();
+      location.reload();
+    } else {
+      alert(data.message || 'Failed to reject case');
+      btn.disabled = false;
+      btn.innerHTML = oldText;
     }
+  } catch (e) {
+    alert('Network error');
+    btn.disabled = false;
+    btn.innerHTML = oldText;
+  }
 }
+
+function openAssignModal(caseId, currentInvestigator = '') {
+  document.getElementById('modal-case-id').value = caseId;
+  const sel = document.getElementById('investigating_officer_select');
+  const input = document.getElementById('investigating_officer');
+  const customContainer = document.getElementById('custom-investigator-container');
+  
+  if (currentInvestigator) {
+    let found = false;
+    for (let i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === currentInvestigator) {
+        sel.selectedIndex = i;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      sel.value = 'custom';
+      input.value = currentInvestigator;
+      customContainer.classList.remove('hidden');
+    } else {
+      input.value = currentInvestigator;
+      customContainer.classList.add('hidden');
+    }
+  } else {
+    sel.selectedIndex = 0;
+    input.value = '';
+    customContainer.classList.add('hidden');
+  }
+  
+  document.getElementById('assign-modal').classList.remove('hidden');
+}
+
+function closeAssignModal() {
+  document.getElementById('assign-modal').classList.add('hidden');
+}
+
+function syncInvestigatorName() {
+  const sel = document.getElementById('investigating_officer_select');
+  const customContainer = document.getElementById('custom-investigator-container');
+  const input = document.getElementById('investigating_officer');
+  
+  if (sel.value === 'custom') {
+    customContainer.classList.remove('hidden');
+    input.value = '';
+    input.focus();
+  } else {
+    customContainer.classList.add('hidden');
+    input.value = sel.value;
+  }
+}
+
+document.getElementById('assign-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const investigator = document.getElementById('investigating_officer').value.trim();
+  
+  if (!investigator) {
+    alert('Please select or enter an investigator name.');
+    return;
+  }
+  
+  const submitBtn = this.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  const oldText = submitBtn.innerHTML;
+  submitBtn.innerHTML = '<i class="ti ti-loader-2 animate-spin"></i> Assigning…';
+  
+  try {
+    const fd = new FormData(this);
+    const res = await fetch('api/case.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+      closeAssignModal();
+      location.reload();
+    } else {
+      alert(data.message || 'Failed to assign investigator');
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = oldText;
+    }
+  } catch (err) {
+    alert('Network error');
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = oldText;
+  }
+});
 </script>
+</body>
+</html>

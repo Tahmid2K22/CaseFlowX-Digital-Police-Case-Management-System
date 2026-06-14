@@ -30,7 +30,7 @@
 
   <!-- Breadcrumb -->
   <div class="max-w-md mx-auto mb-5 flex items-center gap-2 text-sm text-gray-500">
-    <a href="home.php" class="hover:text-accent transition-colors flex items-center gap-1">
+    <a href="index.php" class="hover:text-accent transition-colors flex items-center gap-1">
       <i class="ti ti-home text-base"></i> Home
     </a>
     <i class="ti ti-chevron-right text-xs"></i>

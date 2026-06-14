@@ -77,13 +77,6 @@ try {
     $_SESSION['officer_role'] = $officer['role'];
     $_SESSION['officer_station'] = $officer['station_code'];
 
-    // Extend session cookie if remember me is checked
-    if ($remember) {
-        $lifetime = 30 * 24 * 60 * 60; // 30 days in seconds
-        session_set_cookie_params($lifetime, '/', '', true, true);
-        session_regenerate_id(true);
-    }
-
     error_log("Officer logged in: badge '{$officer['badge_number']}', name '{$officer['full_name']}'");
 
     echo json_encode([

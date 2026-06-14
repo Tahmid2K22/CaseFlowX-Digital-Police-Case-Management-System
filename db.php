@@ -48,20 +48,72 @@ function init_schema(PDO $pdo): void {
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS cases (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            citizen_id      INTEGER NOT NULL,
+            citizen_id      INTEGER,
             case_number     TEXT    NOT NULL UNIQUE,
             title           TEXT    NOT NULL,
             description     TEXT    NOT NULL,
-            status          TEXT    NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','resolved','closed')),
-            priority        TEXT    NOT NULL DEFAULT 'low' CHECK(priority IN ('low','medium','high')),
+            status          TEXT    NOT NULL DEFAULT 'Submitted' CHECK(status IN ('Submitted','Under Review','Registered','Rejected')),
+            priority        TEXT    NOT NULL DEFAULT 'medium' CHECK(priority IN ('low','medium','high')),
             created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
-            FOREIGN KEY (citizen_id) REFERENCES citizens(id) ON DELETE CASCADE
+            fir_number      TEXT,
+            complainant_name TEXT,
+            complainant_nid  TEXT,
+            complainant_phone TEXT,
+            complainant_address TEXT,
+            incident_date    TEXT,
+            incident_time    TEXT,
+            incident_location TEXT,
+            incident_description TEXT,
+            sections_applied TEXT,
+            witness_details  TEXT,
+            officer_id       INTEGER,
+            station_code     TEXT,
+            investigating_officer TEXT,
+            modified_by      INTEGER,
+            modified_at      TEXT,
+            FOREIGN KEY (citizen_id) REFERENCES citizens(id) ON DELETE CASCADE,
+            FOREIGN KEY (officer_id) REFERENCES officers(id) ON DELETE SET NULL
         )
     ");
 
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_cases_citizen ON cases(citizen_id)");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status)");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_cases_created ON cases(created_at)");
+    // Dynamic migration: Ensure all required columns exist in the cases table
+    $requiredCaseCols = [
+        'fir_number'            => 'TEXT',
+        'complainant_name'      => 'TEXT',
+        'complainant_nid'       => 'TEXT',
+        'complainant_phone'     => 'TEXT',
+        'complainant_address'   => 'TEXT',
+        'incident_date'         => 'TEXT',
+        'incident_time'         => 'TEXT',
+        'incident_location'     => 'TEXT',
+        'incident_description'  => 'TEXT',
+        'sections_applied'      => 'TEXT',
+        'witness_details'       => 'TEXT',
+        'officer_id'            => 'INTEGER',
+        'station_code'          => 'TEXT',
+        'investigating_officer' => 'TEXT',
+        'modified_by'           => 'INTEGER',
+        'modified_at'           => 'TEXT'
+    ];
+    try {
+        $existingCols = [];
+        $stmt = $pdo->query("PRAGMA table_info(cases)");
+        while ($row = $stmt->fetch()) {
+            $existingCols[] = $row['name'];
+        }
+        foreach ($requiredCaseCols as $col => $type) {
+            if (!in_array($col, $existingCols, true)) {
+                $pdo->exec("ALTER TABLE cases ADD COLUMN {$col} {$type}");
+            }
+        }
+    } catch (PDOException $e) {
+        error_log("Cases table migration failed: " . $e->getMessage());
+    }
+
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_cases_citizen ON cases(citizen_id)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_cases_officer ON cases(officer_id)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_cases_created ON cases(created_at)');
 
     // Officers table with role support
     $pdo->exec("
@@ -108,27 +160,68 @@ function init_schema(PDO $pdo): void {
         )
     ");
 
-    // FIR Evidence table
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS fir_evidence (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            fir_id          INTEGER NOT NULL,
+            case_id         INTEGER NOT NULL,
             file_name       TEXT    NOT NULL,
             file_path       TEXT    NOT NULL,
             file_type       TEXT    NOT NULL,
             file_size       INTEGER NOT NULL,
             uploaded_by     INTEGER NOT NULL,
             uploaded_at     TEXT    NOT NULL DEFAULT (datetime('now')),
-            FOREIGN KEY (fir_id) REFERENCES fir_records(id) ON DELETE CASCADE,
+            FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
             FOREIGN KEY (uploaded_by) REFERENCES officers(id) ON DELETE RESTRICT
         )
     ");
+
+    // Dynamic migration: Ensure case_id column exists in fir_evidence table
+    try {
+        $existingEvCols = [];
+        $stmt = $pdo->query("PRAGMA table_info(fir_evidence)");
+        while ($row = $stmt->fetch()) {
+            $existingEvCols[] = $row['name'];
+        }
+        if (!in_array('case_id', $existingEvCols, true)) {
+            $pdo->exec("ALTER TABLE fir_evidence ADD COLUMN case_id INTEGER");
+        }
+    } catch (PDOException $e) {
+        error_log("Evidence table migration failed: " . $e->getMessage());
+    }
+
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_evidence_case ON fir_evidence(case_id)');
 
     // FIR indexes
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_fir_officer ON fir_records(officer_id)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_fir_status ON fir_records(status)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_fir_number ON fir_records(fir_number)");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_evidence_fir ON fir_evidence(fir_id)");
+}
+
+function require_citizen(): array {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
+    if (empty($_SESSION['logged_in']) || empty($_SESSION['citizen_id'])) {
+        header('HTTP/1.1 401 Unauthorized');
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Authentication required']);
+        exit;
+    }
+
+    $db = get_db();
+    $stmt = $db->prepare('SELECT * FROM citizens WHERE id = ? AND status = ?');
+    $stmt->execute([$_SESSION['citizen_id'], 'active']);
+    $citizen = $stmt->fetch();
+
+    if (!$citizen) {
+        header('HTTP/1.1 401 Unauthorized');
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Citizen not found or suspended']);
+        exit;
+    }
+
+    return $citizen;
 }
 
 function require_officer(): array {
