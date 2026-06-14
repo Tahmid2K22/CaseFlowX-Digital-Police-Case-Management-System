@@ -16,7 +16,7 @@ if (empty($_SESSION['logged_in']) || empty($_SESSION['citizen_id'])) {
 require_once __DIR__ . '/db.php';
 
 $db = get_db();
-$stmt = $db->prepare('SELECT * FROM citizens WHERE id = :id LIMIT 1');
+$stmt = $db->prepare('SELECT * FROM users WHERE id = :id AND role = "Citizen" LIMIT 1');
 $stmt->execute([':id' => $_SESSION['citizen_id']]);
 $citizen = $stmt->fetch();
 

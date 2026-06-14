@@ -97,6 +97,61 @@ try {
         }
     }
 
+    // Create unified cases table referencing the unified users table
+    $pdo->exec("CREATE TABLE IF NOT EXISTS cases (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        citizen_id      INTEGER NOT NULL,
+        case_number     TEXT    NOT NULL UNIQUE,
+        title           TEXT    NOT NULL,
+        description     TEXT    NOT NULL,
+        status          TEXT    NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','resolved','closed')),
+        priority        TEXT    NOT NULL DEFAULT 'low' CHECK(priority IN ('low','medium','high')),
+        created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+        investigator_id INTEGER,
+        FOREIGN KEY (citizen_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (investigator_id) REFERENCES users(id) ON DELETE SET NULL
+    )");
+
+    // Seed default cases if cases table is empty
+    $stmt_cases = $pdo->query("SELECT COUNT(*) FROM cases");
+    $cases_count = $stmt_cases->fetchColumn();
+    if ($cases_count == 0) {
+        $mock_cases = [
+            [
+                'citizen_id' => 4, // Citizen Tahmid
+                'case_number' => 'CF001-2026',
+                'title' => 'Burglar Alert at Dhanmondi',
+                'description' => 'A burglary attempt was made at my residence in Dhanmondi. The suspect fled when the alarm went off.',
+                'status' => 'in_progress',
+                'priority' => 'high',
+                'investigator_id' => 3 // Investigator Salam
+            ],
+            [
+                'citizen_id' => 4, // Citizen Tahmid
+                'case_number' => 'CF002-2026',
+                'title' => 'Lost Mobile Phone',
+                'description' => 'I lost my iPhone 14 Pro near Dhanmondi Lake around 5 PM yesterday.',
+                'status' => 'open',
+                'priority' => 'low',
+                'investigator_id' => 3 // Investigator Salam
+            ],
+            [
+                'citizen_id' => 4, // Citizen Tahmid
+                'case_number' => 'CF003-2026',
+                'title' => 'Online Harassment Complaint',
+                'description' => 'Receiving abusive messages and threats on Facebook from an unknown profile.',
+                'status' => 'open',
+                'priority' => 'medium',
+                'investigator_id' => null
+            ]
+        ];
+
+        $insert_case = $pdo->prepare("INSERT INTO cases (citizen_id, case_number, title, description, status, priority, investigator_id) VALUES (:citizen_id, :case_number, :title, :description, :status, :priority, :investigator_id)");
+        foreach ($mock_cases as $c) {
+            $insert_case->execute($c);
+        }
+    }
+
 } catch (PDOException $e) {
     die("Database connection failed: " . $e->getMessage());
 }

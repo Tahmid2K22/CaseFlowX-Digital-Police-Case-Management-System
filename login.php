@@ -18,7 +18,12 @@ if (is_logged_in()) {
         header("Location: fir_officer_dashboard.php");
         exit;
     } elseif ($role === 'Investigator') {
-        header("Location: unauthorized.php");
+        header("Location: investigator_dashboard.php");
+        exit;
+    } elseif ($role === 'Citizen') {
+        $_SESSION['citizen_id'] = $_SESSION['user_id'];
+        $_SESSION['logged_in'] = true;
+        header("Location: dashboard.php");
         exit;
     } else {
         header("Location: unauthorized.php");
@@ -62,7 +67,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif ($role === 'Officer') {
                 header("Location: fir_officer_dashboard.php");
             } elseif ($role === 'Investigator') {
-                header("Location: unauthorized.php");
+                header("Location: investigator_dashboard.php");
+            } elseif ($role === 'Citizen') {
+                $_SESSION['citizen_id'] = $_SESSION['user_id'];
+                $_SESSION['logged_in'] = true;
+                header("Location: dashboard.php");
             } else {
                 header("Location: unauthorized.php");
             }

@@ -33,7 +33,7 @@ try {
     $citizenId = (int)$_SESSION['citizen_id'];
 
     // Fetch current user for verification
-    $stmt = $db->prepare('SELECT * FROM citizens WHERE id = :id LIMIT 1');
+    $stmt = $db->prepare('SELECT * FROM users WHERE id = :id AND role = "Citizen" LIMIT 1');
     $stmt->execute([':id' => $citizenId]);
     $user = $stmt->fetch();
 
@@ -50,7 +50,7 @@ try {
 
         if ($currentPassword === '') {
             $errors['current_password'] = 'Current password is required.';
-        } elseif (!password_verify($currentPassword, $user['password_hash'])) {
+        } elseif (!password_verify($currentPassword, $user['password'])) {
             $errors['current_password'] = 'Current password is incorrect.';
         }
 
@@ -73,7 +73,7 @@ try {
         }
 
         $newHash = password_hash($newPassword, PASSWORD_BCRYPT);
-        $update = $db->prepare('UPDATE citizens SET password_hash = :hash WHERE id = :id');
+        $update = $db->prepare('UPDATE users SET password = :hash WHERE id = :id');
         $update->execute([':hash' => $newHash, ':id' => $citizenId]);
 
         json_exit(true, 'Password updated successfully.');
@@ -105,7 +105,7 @@ try {
 
         // Uniqueness check for email if changed
         if ($email !== '' && $email !== ($user['email'] ?? '')) {
-            $check = $db->prepare('SELECT id FROM citizens WHERE email = :email AND id != :id LIMIT 1');
+            $check = $db->prepare('SELECT id FROM users WHERE email = :email AND id != :id LIMIT 1');
             $check->execute([':email' => $email, ':id' => $citizenId]);
             if ($check->fetch()) {
                 $errors['email'] = 'This email is already in use.';
@@ -117,7 +117,7 @@ try {
         }
 
         $update = $db->prepare('
-            UPDATE citizens
+            UPDATE users
             SET email = :email, division = :division, district = :district, address = :address
             WHERE id = :id
         ');
