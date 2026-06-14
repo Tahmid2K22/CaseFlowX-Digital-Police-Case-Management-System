@@ -18,7 +18,7 @@ require_once __DIR__ . '/db.php';
 
 // Fetch citizen details
 $db = get_db();
-$stmt = $db->prepare('SELECT * FROM citizens WHERE id = :id LIMIT 1');
+$stmt = $db->prepare('SELECT * FROM users WHERE id = :id AND role = "Citizen" LIMIT 1');
 $stmt->execute([':id' => $_SESSION['citizen_id']]);
 $citizen = $stmt->fetch();
 

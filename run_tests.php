@@ -31,6 +31,21 @@ try {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )");
+
+    // Create cases table matching the main db.php schema
+    $pdo->exec("CREATE TABLE IF NOT EXISTS cases (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        citizen_id      INTEGER NOT NULL,
+        case_number     TEXT    NOT NULL UNIQUE,
+        title           TEXT    NOT NULL,
+        description     TEXT    NOT NULL,
+        status          TEXT    NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','resolved','closed')),
+        priority        TEXT    NOT NULL DEFAULT 'low' CHECK(priority IN ('low','medium','high')),
+        created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+        investigator_id INTEGER,
+        FOREIGN KEY (citizen_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (investigator_id) REFERENCES users(id) ON DELETE SET NULL
+    )");
 } catch (Exception $e) {
     die("Test DB Setup Failed: " . $e->getMessage());
 }
@@ -166,6 +181,44 @@ assert_true(simulate_rbac_check('Admin', ['Admin']), "Admin should be allowed ac
 assert_true(!simulate_rbac_check('Officer', ['Admin']), "Officer should be denied access to Admin area.");
 assert_true(!simulate_rbac_check('Citizen', ['Admin']), "Citizen should be denied access to Admin area.");
 assert_true(simulate_rbac_check('Officer', ['Admin', 'Officer']), "Officer should be allowed access to Officer area.");
+
+// 10. Investigation Officer Login & Redirection Simulation (SCRUM-63 & SCRUM-62)
+assert_true(simulate_rbac_check('Investigator', ['Investigator']), "Investigator should be allowed access to Investigator area.");
+assert_true(!simulate_rbac_check('Citizen', ['Investigator']), "Citizen should be denied access to Investigator area.");
+
+// 11. Investigation Officer Case Filtering (SCRUM-60)
+// Seed an Investigator and mock cases in the test database
+$investigator_pw = password_hash('investigator123', PASSWORD_BCRYPT);
+$pdo->prepare("INSERT INTO users (full_name, national_id, date_of_birth, gender, phone, email, division, district, address, password, role, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    ->execute(['Test Investigator', '1234567894', '1985-11-20', 'male', '01712345689', 'investigator@test.com', 'Dhaka', 'Dhaka', 'Station', $investigator_pw, 'Investigator', 'Active']);
+
+// Fetch Investigator ID
+$stmt = $pdo->prepare("SELECT id FROM users WHERE role = 'Investigator' AND phone = '01712345689' LIMIT 1");
+$stmt->execute();
+$inv_id = $stmt->fetchColumn();
+
+// Seed cases
+// Case 1: Assigned to Investigator
+$pdo->prepare("INSERT INTO cases (citizen_id, case_number, title, description, status, priority, investigator_id) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    ->execute([1, 'CF001-2026', 'Assigned Case 1', 'Desc 1', 'open', 'high', $inv_id]);
+// Case 2: Assigned to Investigator
+$pdo->prepare("INSERT INTO cases (citizen_id, case_number, title, description, status, priority, investigator_id) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    ->execute([1, 'CF002-2026', 'Assigned Case 2', 'Desc 2', 'in_progress', 'medium', $inv_id]);
+// Case 3: Assigned to someone else (null investigator)
+$pdo->prepare("INSERT INTO cases (citizen_id, case_number, title, description, status, priority, investigator_id) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    ->execute([1, 'CF003-2026', 'Unassigned Case', 'Desc 3', 'open', 'low', null]);
+
+// Filter cases by investigator_id
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM cases WHERE investigator_id = ?");
+$stmt->execute([$inv_id]);
+$assigned_cases_count = (int)$stmt->fetchColumn();
+assert_equals(2, $assigned_cases_count, "Investigator should see only their 2 assigned cases.");
+
+// Filter unassigned cases
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM cases WHERE investigator_id IS NULL");
+$stmt->execute();
+$unassigned_cases_count = (int)$stmt->fetchColumn();
+assert_equals(1, $unassigned_cases_count, "Unassigned cases should not be visible to this investigator.");
 
 echo PHP_EOL;
 echo COLOR_CYAN . "=========================================================" . COLOR_RESET . PHP_EOL;
