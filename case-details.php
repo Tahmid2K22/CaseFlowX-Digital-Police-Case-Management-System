@@ -8,35 +8,61 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-if (empty($_SESSION['logged_in']) || empty($_SESSION['citizen_id'])) {
+require_once __DIR__ . '/auth.php';
+
+if (!is_logged_in()) {
     header('Location: login.php');
     exit;
 }
 
-require_once __DIR__ . '/db.php';
-
 $caseId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-
-if ($caseId <= 0) {
-    header('Location: cases.php');
-    exit;
-}
 
 $db = get_db();
 $stmt = $db->prepare('
-    SELECT * FROM cases
-    WHERE id = :id AND citizen_id = :citizen_id
+    SELECT c.*, u.full_name as citizen_name, u.phone as citizen_phone, u.email as citizen_email
+    FROM cases c
+    JOIN users u ON c.citizen_id = u.id
+    WHERE c.id = :id
     LIMIT 1
 ');
-$stmt->execute([
-    ':id'         => $caseId,
-    ':citizen_id' => $_SESSION['citizen_id'],
-]);
+$stmt->execute([':id' => $caseId]);
 $case = $stmt->fetch();
 
 if (!$case) {
-    header('Location: cases.php');
+    $role = $_SESSION['role'] ?? '';
+    if ($role === 'Investigator') {
+        header('Location: investigator_dashboard.php');
+    } else {
+        header('Location: cases.php');
+    }
     exit;
+}
+
+$role = $_SESSION['role'] ?? '';
+$allowed = false;
+
+if ($role === 'Admin' || $role === 'Officer') {
+    $allowed = true;
+} elseif ($role === 'Citizen') {
+    if ($case['citizen_id'] == $_SESSION['user_id']) {
+        $allowed = true;
+    }
+} elseif ($role === 'Investigator') {
+    if ($case['investigator_id'] == $_SESSION['user_id']) {
+        $allowed = true;
+    }
+}
+
+if (!$allowed) {
+    header('Location: unauthorized.php');
+    exit;
+}
+
+$assignedInvestigator = null;
+if (!empty($case['investigator_id'])) {
+    $i_stmt = $db->prepare('SELECT full_name, phone FROM users WHERE id = :id LIMIT 1');
+    $i_stmt->execute([':id' => $case['investigator_id']]);
+    $assignedInvestigator = $i_stmt->fetch();
 }
 
 function statusBadge(string $status): string {
@@ -136,6 +162,34 @@ function priorityBadge(string $priority): string {
           </div>
         </div>
 
+        <!-- Contact / Assignment details -->
+        <div class="mb-6 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-slide-up">
+          <?php if ($role === 'Investigator' || $role === 'Admin' || $role === 'Officer'): ?>
+            <div class="bg-[#E8F8F3] border border-emerald-100 rounded-xl p-4">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-800 mb-2 flex items-center gap-1.5">
+                <i class="ti ti-user"></i> Citizen Information
+              </h3>
+              <p class="text-sm text-navy font-semibold"><?= htmlspecialchars($case['citizen_name']) ?></p>
+              <p class="text-xs text-gray-500 mt-1"><i class="ti ti-phone text-xs"></i> Phone: <?= htmlspecialchars($case['citizen_phone']) ?></p>
+              <?php if (!empty($case['citizen_email'])): ?>
+                <p class="text-xs text-gray-500 mt-0.5"><i class="ti ti-mail text-xs"></i> Email: <?= htmlspecialchars($case['citizen_email']) ?></p>
+              <?php endif; ?>
+            </div>
+          <?php endif; ?>
+
+          <div class="bg-blue-50 border border-blue-100 rounded-xl p-4">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-blue-800 mb-2 flex items-center gap-1.5">
+              <i class="ti ti-user-shield"></i> Assigned Investigator
+            </h3>
+            <?php if ($assignedInvestigator): ?>
+              <p class="text-sm text-navy font-semibold"><?= htmlspecialchars($assignedInvestigator['full_name']) ?></p>
+              <p class="text-xs text-gray-500 mt-1"><i class="ti ti-phone text-xs"></i> Phone: <?= htmlspecialchars($assignedInvestigator['phone']) ?></p>
+            <?php else: ?>
+              <p class="text-sm text-gray-400 italic font-medium">No investigator assigned yet.</p>
+            <?php endif; ?>
+          </div>
+        </div>
+
         <!-- Meta grid -->
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div class="bg-[#f8f9fc] rounded-xl p-4">
@@ -162,12 +216,21 @@ function priorityBadge(string $priority): string {
 
     <!-- Actions -->
     <div class="flex items-center justify-between">
+      <?php if ($role === 'Investigator'): ?>
+      <a href="investigator_dashboard.php" class="inline-flex items-center gap-2 text-gray-600 hover:text-navy text-sm font-medium transition">
+        <i class="ti ti-arrow-left text-xs"></i> Back to Dashboard
+      </a>
+      <?php else: ?>
       <a href="cases.php" class="inline-flex items-center gap-2 text-gray-600 hover:text-navy text-sm font-medium transition">
         <i class="ti ti-arrow-left text-xs"></i> Back to My Cases
       </a>
+      <?php endif; ?>
+      
+      <?php if ($role === 'Citizen'): ?>
       <a href="new-case.php" class="inline-flex items-center gap-2 bg-accent hover:bg-accent-dark text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition">
         <i class="ti ti-plus text-base"></i> File Another Case
       </a>
+      <?php endif; ?>
     </div>
   </div>
 </div>
