@@ -120,7 +120,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 // Fetch Stats
 $total_users = $pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
 $total_admins = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'Admin'")->fetchColumn();
-$total_staff = $pdo->query("SELECT COUNT(*) FROM users WHERE role IN ('Officer', 'Investigator')")->fetchColumn();
+$total_officers = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'Officer'")->fetchColumn();
+$total_investigators = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'Investigator'")->fetchColumn();
+$total_citizens = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'Citizen'")->fetchColumn();
 $total_suspended = $pdo->query("SELECT COUNT(*) FROM users WHERE status = 'Suspended'")->fetchColumn();
 
 // Handle Search and Filter Query
@@ -167,7 +169,9 @@ $t = [
         'btn_clear' => 'Clear',
         'stat_total' => 'Total Users',
         'stat_admins' => 'Admin Accounts',
-        'stat_staff' => 'Officers & Investigators',
+        'stat_officers' => 'Officer Accounts',
+        'stat_investigators' => 'Investigator Accounts',
+        'stat_citizens' => 'Citizen Accounts',
         'stat_suspended' => 'Suspended Accounts',
         'tbl_name' => 'Name',
         'tbl_phone' => 'Phone',
@@ -215,7 +219,9 @@ $t = [
         'btn_clear' => 'মুছুন',
         'stat_total' => 'মোট ব্যবহারকারী',
         'stat_admins' => 'অ্যাডমিন অ্যাকাউন্ট',
-        'stat_staff' => 'অফিসার ও তদন্তকারী',
+        'stat_officers' => 'অফিসার অ্যাকাউন্ট',
+        'stat_investigators' => 'তদন্তকারী অ্যাকাউন্ট',
+        'stat_citizens' => 'নাগরিক অ্যাকাউন্ট',
         'stat_suspended' => 'স্থগিত অ্যাকাউন্ট',
         'tbl_name' => 'নাম',
         'tbl_phone' => 'মোবাইল',
@@ -317,7 +323,7 @@ $cur = $t[$lang];
         ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 4px; }
     </style>
 </head>
-<body class="min-h-screen flex overflow-hidden">
+<body class="h-screen flex overflow-hidden">
 
 <?php
 $adminName = $_SESSION['username'] ?? 'Admin';
@@ -456,7 +462,8 @@ $initials  = strtoupper(implode('', array_map(fn($w) => !empty($w) ? $w[0] : '',
         </div>
 
         <!-- Stats Grid -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-slide-up">
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 animate-slide-up">
+            <!-- Total Users -->
             <div class="stat-card bg-white border border-slate-100 shadow-sm">
                 <div class="flex items-start justify-between mb-3">
                     <div class="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center">
@@ -468,6 +475,7 @@ $initials  = strtoupper(implode('', array_map(fn($w) => !empty($w) ? $w[0] : '',
                 <p class="text-gray-500 text-sm mt-1 font-medium"><?php echo $cur['stat_total']; ?></p>
             </div>
 
+            <!-- Admins -->
             <div class="stat-card bg-white border border-slate-100 shadow-sm">
                 <div class="flex items-start justify-between mb-3">
                     <div class="w-11 h-11 rounded-xl bg-purple-50 flex items-center justify-center">
@@ -479,26 +487,52 @@ $initials  = strtoupper(implode('', array_map(fn($w) => !empty($w) ? $w[0] : '',
                 <p class="text-gray-500 text-sm mt-1 font-medium"><?php echo $cur['stat_admins']; ?></p>
             </div>
 
+            <!-- Officers -->
+            <div class="stat-card bg-white border border-slate-100 shadow-sm">
+                <div class="flex items-start justify-between mb-3">
+                    <div class="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center">
+                        <i class="ti ti-shield text-xl text-blue-600"></i>
+                    </div>
+                    <span class="badge bg-blue-50 text-blue-600"><?php echo $lang === 'bn' ? 'কর্মকর্তা' : 'Officer'; ?></span>
+                </div>
+                <p class="text-3xl font-bold text-navy counter" data-target="<?php echo $total_officers; ?>"><?php echo $total_officers; ?></p>
+                <p class="text-gray-500 text-sm mt-1 font-medium"><?php echo $cur['stat_officers']; ?></p>
+            </div>
+
+            <!-- Investigators -->
             <div class="stat-card bg-white border border-slate-100 shadow-sm">
                 <div class="flex items-start justify-between mb-3">
                     <div class="w-11 h-11 rounded-xl bg-indigo-50 flex items-center justify-center">
-                        <i class="ti ti-badge text-xl text-indigo-600"></i>
+                        <i class="ti ti-briefcase text-xl text-indigo-600"></i>
                     </div>
-                    <span class="badge bg-indigo-50 text-indigo-600"><?php echo $lang === 'bn' ? 'স্টাফ' : 'Staff'; ?></span>
+                    <span class="badge bg-indigo-50 text-indigo-600"><?php echo $lang === 'bn' ? 'তদন্তকারী' : 'Investigator'; ?></span>
                 </div>
-                <p class="text-3xl font-bold text-navy counter" data-target="<?php echo $total_staff; ?>"><?php echo $total_staff; ?></p>
-                <p class="text-gray-500 text-sm mt-1 font-medium"><?php echo $cur['stat_staff']; ?></p>
+                <p class="text-3xl font-bold text-navy counter" data-target="<?php echo $total_investigators; ?>"><?php echo $total_investigators; ?></p>
+                <p class="text-gray-500 text-sm mt-1 font-medium"><?php echo $cur['stat_investigators']; ?></p>
             </div>
 
-            <div class="stat-card bg-gradient-to-br from-navy to-navy2 text-white shadow-sm">
+            <!-- Citizens -->
+            <div class="stat-card bg-white border border-slate-100 shadow-sm">
                 <div class="flex items-start justify-between mb-3">
-                    <div class="w-11 h-11 rounded-xl bg-rose-500/10 flex items-center justify-center">
-                        <i class="ti ti-user-off text-xl text-rose-500"></i>
+                    <div class="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center">
+                        <i class="ti ti-user-check text-xl text-emerald-600"></i>
                     </div>
-                    <span class="badge bg-rose-500/20 text-rose-300"><?php echo $lang === 'bn' ? 'স্থগিত' : 'Suspended'; ?></span>
+                    <span class="badge bg-emerald-50 text-emerald-600"><?php echo $lang === 'bn' ? 'নাগরিক' : 'Citizen'; ?></span>
                 </div>
-                <p class="text-3xl font-bold text-white counter" data-target="<?php echo $total_suspended; ?>"><?php echo $total_suspended; ?></p>
-                <p class="text-white/70 text-sm mt-1 font-medium"><?php echo $cur['stat_suspended']; ?></p>
+                <p class="text-3xl font-bold text-navy counter" data-target="<?php echo $total_citizens; ?>"><?php echo $total_citizens; ?></p>
+                <p class="text-gray-500 text-sm mt-1 font-medium"><?php echo $cur['stat_citizens']; ?></p>
+            </div>
+
+            <!-- Suspended -->
+            <div class="stat-card bg-white border border-slate-100 shadow-sm">
+                <div class="flex items-start justify-between mb-3">
+                    <div class="w-11 h-11 rounded-xl bg-rose-50 flex items-center justify-center">
+                        <i class="ti ti-user-off text-xl text-rose-600"></i>
+                    </div>
+                    <span class="badge bg-rose-50 text-rose-600"><?php echo $lang === 'bn' ? 'স্থগিত' : 'Suspended'; ?></span>
+                </div>
+                <p class="text-3xl font-bold text-navy counter" data-target="<?php echo $total_suspended; ?>"><?php echo $total_suspended; ?></p>
+                <p class="text-gray-500 text-sm mt-1 font-medium"><?php echo $cur['stat_suspended']; ?></p>
             </div>
         </div>
 

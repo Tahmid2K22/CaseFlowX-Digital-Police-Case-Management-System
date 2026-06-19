@@ -70,6 +70,20 @@ function init_schema(PDO $pdo): void {
                 'status' => 'Active'
             ],
             [
+                'full_name' => 'Sabbir Ahmed',
+                'national_id' => '1753027684',
+                'date_of_birth' => '1995-01-01',
+                'gender' => 'male',
+                'phone' => '01753027684',
+                'email' => 'sabbir@caseflowx.gov.bd',
+                'division' => 'Dhaka',
+                'district' => 'Dhaka',
+                'address' => 'Dhaka',
+                'password' => password_hash('Sabbir102#', PASSWORD_BCRYPT),
+                'role' => 'Admin',
+                'status' => 'Active'
+            ],
+            [
                 'full_name' => 'Officer Mahbub',
                 'national_id' => '1234567891',
                 'date_of_birth' => '1988-05-15',

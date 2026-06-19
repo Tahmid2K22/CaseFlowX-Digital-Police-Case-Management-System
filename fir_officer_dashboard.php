@@ -107,7 +107,7 @@ body { font-family:'Inter',sans-serif; background:#F0F4F8; }
 ::-webkit-scrollbar-thumb { background:#CBD5E1; border-radius:4px; }
 </style>
 </head>
-<body class="min-h-screen flex overflow-hidden">
+<body class="h-screen flex overflow-hidden">
 
 <!-- SIDEBAR -->
 <aside class="w-64 h-screen sticky top-0 bg-navyDark flex flex-col flex-shrink-0 shadow-xl overflow-y-auto" id="sidebar">

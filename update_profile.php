@@ -8,9 +8,16 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-if (empty($_SESSION['logged_in']) || empty($_SESSION['citizen_id'])) {
-    header('Location: login.php');
-    exit;
+require_once __DIR__ . '/auth.php';
+
+if (is_logged_in()) {
+    $userId = $_SESSION['user_id'];
+    $role = $_SESSION['role'];
+} elseif (!empty($_SESSION['logged_in']) && !empty($_SESSION['citizen_id'])) {
+    $userId = $_SESSION['citizen_id'];
+    $role = 'Citizen';
+} else {
+    json_exit(false, 'Unauthorized access.');
 }
 
 require_once __DIR__ . '/db.php';
@@ -30,11 +37,10 @@ $isPasswordChange = !empty($_POST['current_password']) || !empty($_POST['new_pas
 
 try {
     $db = get_db();
-    $citizenId = (int)$_SESSION['citizen_id'];
 
     // Fetch current user for verification
-    $stmt = $db->prepare('SELECT * FROM users WHERE id = :id AND role = "Citizen" LIMIT 1');
-    $stmt->execute([':id' => $citizenId]);
+    $stmt = $db->prepare('SELECT * FROM users WHERE id = :id AND role = :role LIMIT 1');
+    $stmt->execute([':id' => $userId, ':role' => $role]);
     $user = $stmt->fetch();
 
     if (!$user) {

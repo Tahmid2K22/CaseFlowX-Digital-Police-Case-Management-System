@@ -8,7 +8,15 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-if (empty($_SESSION['logged_in']) || empty($_SESSION['citizen_id'])) {
+require_once __DIR__ . '/auth.php';
+
+if (is_logged_in()) {
+    $userId = $_SESSION['user_id'];
+    $role = $_SESSION['role'];
+} elseif (!empty($_SESSION['logged_in']) && !empty($_SESSION['citizen_id'])) {
+    $userId = $_SESSION['citizen_id'];
+    $role = 'Citizen';
+} else {
     header('Location: login.php');
     exit;
 }
@@ -16,8 +24,8 @@ if (empty($_SESSION['logged_in']) || empty($_SESSION['citizen_id'])) {
 require_once __DIR__ . '/db.php';
 
 $db = get_db();
-$stmt = $db->prepare('SELECT * FROM users WHERE id = :id AND role = "Citizen" LIMIT 1');
-$stmt->execute([':id' => $_SESSION['citizen_id']]);
+$stmt = $db->prepare('SELECT * FROM users WHERE id = :id AND role = :role LIMIT 1');
+$stmt->execute([':id' => $userId, ':role' => $role]);
 $citizen = $stmt->fetch();
 
 if (!$citizen) {
@@ -43,7 +51,7 @@ if (!$citizen) {
 </script>
 
 <div class="min-h-[calc(100vh-200px)] bg-[#F4F6F9]">
-  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <!-- Breadcrumb -->
     <div class="mb-5 flex items-center gap-2 text-sm text-gray-500">
       <a href="dashboard.php" class="hover:text-accent transition-colors flex items-center gap-1">
@@ -54,46 +62,82 @@ if (!$citizen) {
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <!-- Profile Summary Card -->
+      <!-- Left Column: Password Change Form -->
       <div class="lg:col-span-1">
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <div class="flex items-center gap-4 mb-6">
-            <div class="w-16 h-16 rounded-2xl bg-accent text-white flex items-center justify-center text-2xl font-bold">
-              <?= strtoupper(substr($citizen['full_name'], 0, 1)) ?>
-            </div>
-            <div>
-              <p class="font-semibold text-navy"><?= htmlspecialchars($citizen['full_name']) ?></p>
-              <p class="text-sm text-gray-500"><?= htmlspecialchars($citizen['phone']) ?></p>
-            </div>
+        <!-- Password Change Form -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div class="bg-navy px-8 py-4 flex items-center gap-3">
+            <i class="ti ti-lock text-accent text-xl"></i>
+            <h2 class="text-white font-semibold">Change Password</h2>
           </div>
 
-          <div class="space-y-3 text-sm">
-            <div class="flex items-center gap-3 pb-3 border-b border-gray-100">
-              <i class="ti ti-id-badge text-gray-400"></i>
-              <span class="text-gray-600">NID:</span>
-              <span class="font-medium text-navy ml-auto"><?= htmlspecialchars($citizen['national_id']) ?></span>
-            </div>
-            <div class="flex items-center gap-3 pb-3 border-b border-gray-100">
-              <i class="ti ti-calendar text-gray-400"></i>
-              <span class="text-gray-600">Date of Birth:</span>
-              <span class="font-medium text-navy ml-auto"><?= htmlspecialchars($citizen['date_of_birth']) ?></span>
-            </div>
-            <div class="flex items-center gap-3 pb-3 border-b border-gray-100">
-              <i class="ti ti-gender-male text-gray-400"></i>
-              <span class="text-gray-600">Gender:</span>
-              <span class="font-medium text-navy ml-auto"><?= ucfirst(htmlspecialchars($citizen['gender'])) ?></span>
-            </div>
-            <div class="flex items-center gap-3">
-              <i class="ti ti-calendar-event text-gray-400"></i>
-              <span class="text-gray-600">Member since:</span>
-              <span class="font-medium text-navy ml-auto"><?= date('M Y', strtotime($citizen['created_at'])) ?></span>
-            </div>
+          <div class="px-8 py-6">
+            <div id="password-alert" class="hidden mb-5 flex items-start gap-3 p-4 rounded-xl text-sm border"></div>
+
+            <form id="password-form" novalidate>
+              <!-- Current Password -->
+              <div class="mb-5">
+                <label for="current_password" class="block text-xs font-semibold text-gray-600 mb-1.5">Current Password <span class="text-red-400">*</span></label>
+                <div class="relative">
+                  <span class="absolute inset-y-0 left-3 flex items-center text-gray-400 pointer-events-none">
+                    <i class="ti ti-lock text-base"></i>
+                  </span>
+                  <input type="password" id="current_password" name="current_password" required
+                         class="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200
+                                text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent
+                                transition placeholder-gray-300">
+                </div>
+                <p class="err-msg hidden text-xs text-red-500 mt-1 flex items-center gap-1" id="err-current_password">
+                  <i class="ti ti-alert-circle text-sm"></i> <span></span>
+                </p>
+              </div>
+
+              <!-- New Password -->
+              <div class="mb-5">
+                <label for="new_password" class="block text-xs font-semibold text-gray-600 mb-1.5">New Password <span class="text-red-400">*</span></label>
+                <div class="relative">
+                  <span class="absolute inset-y-0 left-3 flex items-center text-gray-400 pointer-events-none">
+                    <i class="ti ti-key text-base"></i>
+                  </span>
+                  <input type="password" id="new_password" name="new_password" required
+                         class="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200
+                                text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent
+                                transition placeholder-gray-300">
+                </div>
+                <p class="err-msg hidden text-xs text-red-500 mt-1 flex items-center gap-1" id="err-new_password">
+                  <i class="ti ti-alert-circle text-sm"></i> <span></span>
+                </p>
+              </div>
+
+              <!-- Confirm New Password -->
+              <div class="mb-5">
+                <label for="confirm_password" class="block text-xs font-semibold text-gray-600 mb-1.5">Confirm New Password <span class="text-red-400">*</span></label>
+                <div class="relative">
+                  <span class="absolute inset-y-0 left-3 flex items-center text-gray-400 pointer-events-none">
+                    <i class="ti ti-key text-base"></i>
+                  </span>
+                  <input type="password" id="confirm_password" name="confirm_password" required
+                         class="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200
+                                text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent
+                                transition placeholder-gray-300">
+                </div>
+                <p class="err-msg hidden text-xs text-red-500 mt-1 flex items-center gap-1" id="err-confirm_password">
+                  <i class="ti ti-alert-circle text-sm"></i> <span></span>
+                </p>
+              </div>
+
+              <button type="submit" id="password-btn"
+                      class="bg-accent hover:bg-accent-dark text-white px-6 py-2.5 rounded-xl
+                             text-sm font-semibold flex items-center gap-2 transition">
+                <i class="ti ti-lock-access text-base"></i> Update Password
+              </button>
+            </form>
           </div>
         </div>
       </div>
 
-      <!-- Edit Forms -->
-      <div class="lg:col-span-2 space-y-6">
+      <!-- Middle Column: Profile Info Form -->
+      <div class="lg:col-span-1">
         <!-- Profile Info Form -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div class="bg-navy px-8 py-4 flex items-center gap-3">
@@ -167,75 +211,42 @@ if (!$citizen) {
             </form>
           </div>
         </div>
+      </div>
 
-        <!-- Password Change Form -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div class="bg-navy px-8 py-4 flex items-center gap-3">
-            <i class="ti ti-lock text-accent text-xl"></i>
-            <h2 class="text-white font-semibold">Change Password</h2>
+      <!-- Right Column: Profile Summary Card -->
+      <div class="lg:col-span-1">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+          <div class="flex items-center gap-4 mb-6">
+            <div class="w-16 h-16 rounded-2xl bg-accent text-white flex items-center justify-center text-2xl font-bold">
+              <?= strtoupper(substr($citizen['full_name'], 0, 1)) ?>
+            </div>
+            <div>
+              <p class="font-semibold text-navy"><?= htmlspecialchars($citizen['full_name']) ?></p>
+              <p class="text-sm text-gray-500"><?= htmlspecialchars($citizen['phone']) ?></p>
+            </div>
           </div>
 
-          <div class="px-8 py-6">
-            <div id="password-alert" class="hidden mb-5 flex items-start gap-3 p-4 rounded-xl text-sm border"></div>
-
-            <form id="password-form" novalidate>
-              <!-- Current Password -->
-              <div class="mb-5">
-                <label for="current_password" class="block text-xs font-semibold text-gray-600 mb-1.5">Current Password <span class="text-red-400">*</span></label>
-                <div class="relative">
-                  <span class="absolute inset-y-0 left-3 flex items-center text-gray-400 pointer-events-none">
-                    <i class="ti ti-lock text-base"></i>
-                  </span>
-                  <input type="password" id="current_password" name="current_password" required
-                         class="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200
-                                text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent
-                                transition placeholder-gray-300">
-                </div>
-                <p class="err-msg hidden text-xs text-red-500 mt-1 flex items-center gap-1" id="err-current_password">
-                  <i class="ti ti-alert-circle text-sm"></i> <span></span>
-                </p>
-              </div>
-
-              <!-- New Password -->
-              <div class="mb-5">
-                <label for="new_password" class="block text-xs font-semibold text-gray-600 mb-1.5">New Password <span class="text-red-400">*</span></label>
-                <div class="relative">
-                  <span class="absolute inset-y-0 left-3 flex items-center text-gray-400 pointer-events-none">
-                    <i class="ti ti-key text-base"></i>
-                  </span>
-                  <input type="password" id="new_password" name="new_password" required
-                         class="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200
-                                text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent
-                                transition placeholder-gray-300">
-                </div>
-                <p class="err-msg hidden text-xs text-red-500 mt-1 flex items-center gap-1" id="err-new_password">
-                  <i class="ti ti-alert-circle text-sm"></i> <span></span>
-                </p>
-              </div>
-
-              <!-- Confirm New Password -->
-              <div class="mb-5">
-                <label for="confirm_password" class="block text-xs font-semibold text-gray-600 mb-1.5">Confirm New Password <span class="text-red-400">*</span></label>
-                <div class="relative">
-                  <span class="absolute inset-y-0 left-3 flex items-center text-gray-400 pointer-events-none">
-                    <i class="ti ti-key text-base"></i>
-                  </span>
-                  <input type="password" id="confirm_password" name="confirm_password" required
-                         class="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200
-                                text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent
-                                transition placeholder-gray-300">
-                </div>
-                <p class="err-msg hidden text-xs text-red-500 mt-1 flex items-center gap-1" id="err-confirm_password">
-                  <i class="ti ti-alert-circle text-sm"></i> <span></span>
-                </p>
-              </div>
-
-              <button type="submit" id="password-btn"
-                      class="bg-accent hover:bg-accent-dark text-white px-6 py-2.5 rounded-xl
-                             text-sm font-semibold flex items-center gap-2 transition">
-                <i class="ti ti-lock-access text-base"></i> Update Password
-              </button>
-            </form>
+          <div class="space-y-3 text-sm">
+            <div class="flex items-center gap-3 pb-3 border-b border-gray-100">
+              <i class="ti ti-id-badge text-gray-400"></i>
+              <span class="text-gray-600">NID:</span>
+              <span class="font-medium text-navy ml-auto"><?= htmlspecialchars($citizen['national_id']) ?></span>
+            </div>
+            <div class="flex items-center gap-3 pb-3 border-b border-gray-100">
+              <i class="ti ti-calendar text-gray-400"></i>
+              <span class="text-gray-600">Date of Birth:</span>
+              <span class="font-medium text-navy ml-auto"><?= htmlspecialchars($citizen['date_of_birth']) ?></span>
+            </div>
+            <div class="flex items-center gap-3 pb-3 border-b border-gray-100">
+              <i class="ti ti-gender-male text-gray-400"></i>
+              <span class="text-gray-600">Gender:</span>
+              <span class="font-medium text-navy ml-auto"><?= ucfirst(htmlspecialchars($citizen['gender'])) ?></span>
+            </div>
+            <div class="flex items-center gap-3">
+              <i class="ti ti-calendar-event text-gray-400"></i>
+              <span class="text-gray-600">Member since:</span>
+              <span class="font-medium text-navy ml-auto"><?= date('M Y', strtotime($citizen['created_at'])) ?></span>
+            </div>
           </div>
         </div>
       </div>

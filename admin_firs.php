@@ -191,7 +191,7 @@ try {
         .pulse-dot { animation: pulse-dot 2s infinite; }
     </style>
 </head>
-<body class="min-h-screen flex overflow-hidden">
+<body class="h-screen flex overflow-hidden">
 
 <?php
 $adminName = $_SESSION['username'] ?? 'Admin';
