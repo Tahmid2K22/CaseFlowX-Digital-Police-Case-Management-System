@@ -355,6 +355,7 @@ $initials  = strtoupper(implode('', array_map(fn($w) => !empty($w) ? $w[0] : '',
         <p class="text-[10px] font-bold uppercase tracking-widest text-white/30 px-3 pt-2 pb-1">Main</p>
         <a href="admin_users.php" class="sidebar-link active"><i class="ti ti-users text-base"></i> Manage Users</a>
         <a href="register.php" class="sidebar-link"><i class="ti ti-user-plus text-base"></i> Register User</a>
+        <a href="admin_firs.php" class="sidebar-link"><i class="ti ti-file-description text-base"></i> Manage FIRs</a>
 
         <p class="text-[10px] font-bold uppercase tracking-widest text-white/30 px-3 pt-4 pb-1">Account</p>
         <a href="profile.php" class="sidebar-link"><i class="ti ti-user-circle text-base"></i> My Profile</a>

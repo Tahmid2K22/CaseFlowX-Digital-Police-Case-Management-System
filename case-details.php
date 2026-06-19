@@ -118,30 +118,31 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
 <header class="bg-navy text-white shadow-md">
   <div class="max-w-7xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-4">
     <div class="flex items-center gap-3">
-      <?php if ($officer): ?>
-        <a href="officer-dashboard.php" class="w-10 h-10 rounded-xl bg-accent flex items-center justify-center text-white text-xl shadow hover:bg-accent-dark transition">
-          <i class="ti ti-arrow-left"></i>
-        </a>
-      <?php else: ?>
-        <a href="index.php" class="w-10 h-10 rounded-xl bg-accent flex items-center justify-center text-white text-xl shadow hover:bg-accent-dark transition">
-          <i class="ti ti-home"></i>
-        </a>
-      <?php endif; ?>
+      <?php
+        $backUrl = 'index.php';
+        $sessionRole = $_SESSION['role'] ?? '';
+        if ($officer) {
+            $backUrl = 'officer-dashboard.php';
+        } elseif ($sessionRole === 'Admin') {
+            $backUrl = 'admin_firs.php';
+        } elseif ($sessionRole === 'Investigator') {
+            $backUrl = 'investigator_dashboard.php';
+        } elseif ($sessionRole === 'Citizen' || !empty($_SESSION['citizen_id'])) {
+            $backUrl = 'cases.php';
+        }
+      ?>
+      <a href="<?= $backUrl ?>" class="w-10 h-10 rounded-xl bg-accent flex items-center justify-center text-white text-xl shadow hover:bg-accent-dark transition">
+        <i class="ti ti-arrow-left"></i>
+      </a>
       <div>
         <h1 class="text-lg font-bold leading-none">Case Details</h1>
         <p class="text-[11px] text-white/50 mt-0.5"><?= htmlspecialchars($case['case_number']) ?> <?php if(!empty($case['fir_number'])) echo "· " . htmlspecialchars($case['fir_number']); ?></p>
       </div>
     </div>
     <div class="flex items-center gap-4">
-      <?php if ($officer): ?>
-        <a href="officer-dashboard.php" class="text-white/70 hover:text-white transition text-xs font-semibold flex items-center gap-1">
-          <i class="ti ti-layout-dashboard"></i> Back to Dashboard
-        </a>
-      <?php else: ?>
-        <a href="index.php" class="text-white/70 hover:text-white transition text-xs font-semibold flex items-center gap-1">
-          <i class="ti ti-home"></i> Back to Home
-        </a>
-      <?php endif; ?>
+      <a href="<?= $backUrl ?>" class="text-white/70 hover:text-white transition text-xs font-semibold flex items-center gap-1">
+        <i class="ti ti-arrow-back"></i> Back
+      </a>
     </div>
   </div>
 </header>
@@ -177,46 +178,26 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
           <i class="ti ti-user-shield"></i> Assign / Update Investigator
         </button>
       <?php endif; ?>
+
+      <?php if ($sessionRole === 'Admin' && ($case['status'] === 'Submitted' || $case['status'] === 'Under Review' || $case['status'] === 'open')): ?>
+        <?php
+          $stmtFir = $db->prepare("SELECT id FROM fir_records WHERE fir_number = ? LIMIT 1");
+          $stmtFir->execute([$case['fir_number']]);
+          $firRecord = $stmtFir->fetch();
+          $firId = $firRecord ? (int)$firRecord['id'] : 0;
+        ?>
+        <?php if ($firId > 0): ?>
+          <button onclick="adminApproveFIR(<?= $firId ?>, '<?= htmlspecialchars($case['fir_number']) ?>', this)" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-sm font-semibold flex items-center gap-1.5 transition shadow">
+            <i class="ti ti-check"></i> Approve FIR
+          </button>
+          <button onclick="adminOpenRejectModal(<?= $firId ?>, '<?= htmlspecialchars($case['fir_number']) ?>')" class="bg-rose-600 hover:bg-rose-700 text-white px-5 py-2 rounded-xl text-sm font-semibold flex items-center gap-1.5 transition shadow">
+            <i class="ti ti-x"></i> Reject FIR
+          </button>
+        <?php endif; ?>
+      <?php endif; ?>
     </div>
   </div>
 
-<<<<<<< HEAD
-        <!-- Contact / Assignment details -->
-        <div class="mb-6 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-slide-up">
-          <?php if ($role === 'Investigator' || $role === 'Admin' || $role === 'Officer'): ?>
-            <div class="bg-[#E8F8F3] border border-emerald-100 rounded-xl p-4">
-              <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-800 mb-2 flex items-center gap-1.5">
-                <i class="ti ti-user"></i> Citizen Information
-              </h3>
-              <p class="text-sm text-navy font-semibold"><?= htmlspecialchars($case['citizen_name']) ?></p>
-              <p class="text-xs text-gray-500 mt-1"><i class="ti ti-phone text-xs"></i> Phone: <?= htmlspecialchars($case['citizen_phone']) ?></p>
-              <?php if (!empty($case['citizen_email'])): ?>
-                <p class="text-xs text-gray-500 mt-0.5"><i class="ti ti-mail text-xs"></i> Email: <?= htmlspecialchars($case['citizen_email']) ?></p>
-              <?php endif; ?>
-            </div>
-          <?php endif; ?>
-
-          <div class="bg-blue-50 border border-blue-100 rounded-xl p-4">
-            <h3 class="text-xs font-bold uppercase tracking-wider text-blue-800 mb-2 flex items-center gap-1.5">
-              <i class="ti ti-user-shield"></i> Assigned Investigator
-            </h3>
-            <?php if ($assignedInvestigator): ?>
-              <p class="text-sm text-navy font-semibold"><?= htmlspecialchars($assignedInvestigator['full_name']) ?></p>
-              <p class="text-xs text-gray-500 mt-1"><i class="ti ti-phone text-xs"></i> Phone: <?= htmlspecialchars($assignedInvestigator['phone']) ?></p>
-            <?php else: ?>
-              <p class="text-sm text-gray-400 italic font-medium">No investigator assigned yet.</p>
-            <?php endif; ?>
-          </div>
-        </div>
-
-        <!-- Meta grid -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div class="bg-[#f8f9fc] rounded-xl p-4">
-            <p class="text-xs text-gray-500 mb-1 flex items-center gap-1">
-              <i class="ti ti-calendar-event text-xs"></i> Filed On
-            </p>
-            <p class="text-sm font-semibold text-navy"><?= date('M d, Y \a\t h:i A', strtotime($case['created_at'])) ?></p>
-=======
   <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 
     <!-- Left / Center 2 Columns: Main details -->
@@ -339,25 +320,6 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
 
     </div>
 
-<<<<<<< HEAD
-    <!-- Actions -->
-    <div class="flex items-center justify-between">
-      <?php if ($role === 'Investigator'): ?>
-      <a href="investigator_dashboard.php" class="inline-flex items-center gap-2 text-gray-600 hover:text-navy text-sm font-medium transition">
-        <i class="ti ti-arrow-left text-xs"></i> Back to Dashboard
-      </a>
-      <?php else: ?>
-      <a href="cases.php" class="inline-flex items-center gap-2 text-gray-600 hover:text-navy text-sm font-medium transition">
-        <i class="ti ti-arrow-left text-xs"></i> Back to My Cases
-      </a>
-      <?php endif; ?>
-      
-      <?php if ($role === 'Citizen'): ?>
-      <a href="new-case.php" class="inline-flex items-center gap-2 bg-accent hover:bg-accent-dark text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition">
-        <i class="ti ti-plus text-base"></i> File Another Case
-      </a>
-      <?php endif; ?>
-=======
     <!-- Right 1 Column: Assignment & Info -->
     <div class="space-y-6">
 
@@ -616,6 +578,108 @@ document.getElementById('assign-form').addEventListener('submit', async function
     submitBtn.innerHTML = oldText;
   }
 });
+
+async function adminApproveFIR(firId, firNumber, btn) {
+  if (!confirm(`Are you sure you want to approve and register FIR ${firNumber}?`)) return;
+  btn.disabled = true;
+  const oldText = btn.innerHTML;
+  btn.innerHTML = '<i class="ti ti-loader-2 animate-spin text-base"></i> Approving…';
+  try {
+    const fd = new FormData();
+    fd.append('fir_id', firId);
+    fd.append('action', 'approve');
+    const res = await fetch('api/admin_fir.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+      alert(data.message || 'FIR Approved and Registered successfully.');
+      location.reload();
+    } else {
+      alert(data.message || 'Failed to approve FIR');
+      btn.disabled = false;
+      btn.innerHTML = oldText;
+    }
+  } catch (e) {
+    alert('Network error');
+    btn.disabled = false;
+    btn.innerHTML = oldText;
+  }
+}
+
+function adminOpenRejectModal(firId, firNumber) {
+  document.getElementById('modal-fir-id').value = firId;
+  document.getElementById('reject-reason').value = '';
+  document.getElementById('reject-modal').classList.remove('hidden');
+}
+
+function adminCloseRejectModal() {
+  document.getElementById('reject-modal').classList.add('hidden');
+}
+
+document.getElementById('reject-form')?.addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const submitBtn = this.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  const oldText = submitBtn.innerHTML;
+  submitBtn.innerHTML = '<i class="ti ti-loader-2 animate-spin text-base"></i> Rejecting…';
+  
+  try {
+    const fd = new FormData(this);
+    const res = await fetch('api/admin_fir.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+      adminCloseRejectModal();
+      alert(data.message || 'FIR Rejected successfully.');
+      location.reload();
+    } else {
+      alert(data.message || 'Failed to reject FIR');
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = oldText;
+    }
+  } catch (e) {
+    alert('Network error');
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = oldText;
+  }
+});
 </script>
+
+<!-- Rejection Reason Modal (Admin only) -->
+<?php if ($sessionRole === 'Admin'): ?>
+<div id="reject-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-xl border border-slate-100">
+        <div class="bg-navy px-6 py-4 flex items-center justify-between text-white">
+            <h3 class="font-bold text-lg flex items-center gap-2">
+                <i class="ti ti-circle-x text-rose-500"></i> Reject FIR Complaint
+            </h3>
+            <button onclick="adminCloseRejectModal()" class="text-white/70 hover:text-white transition"><i class="ti ti-x text-lg"></i></button>
+        </div>
+        <form id="reject-form" class="p-6 space-y-4">
+            <input type="hidden" id="modal-fir-id" name="fir_id">
+            <input type="hidden" name="action" value="reject">
+            
+            <div>
+                <label for="reject-reason" class="block text-xs font-semibold text-gray-600 mb-1.5">
+                    Reason for Rejection <span class="text-rose-500">*</span>
+                </label>
+                <textarea id="reject-reason" name="reason" rows="4" required 
+                          placeholder="Enter explanation or citation of legal code..." 
+                          class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition resize-y"></textarea>
+            </div>
+            
+            <div class="flex justify-end gap-3 pt-2">
+                <button type="button" onclick="adminCloseRejectModal()" 
+                        class="px-4 py-2 border border-slate-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-slate-50 transition">
+                    Cancel
+                </button>
+                <button type="submit" 
+                        class="bg-rose-600 hover:bg-rose-700 text-white px-5 py-2 rounded-xl text-sm font-semibold transition shadow-sm">
+                    Confirm Rejection
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
+
 </body>
 </html>
