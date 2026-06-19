@@ -1,4 +1,3 @@
-
 <?php
 /**
  * submit_case.php — CaseFlowX
@@ -64,7 +63,26 @@ try {
     $db = get_db();
     $citizenId = (int)$_SESSION['citizen_id'];
 
-    // Generate case number: CFXXX-YYYY
+    // Fetch citizen data
+    $citizenStmt = $db->prepare("
+        SELECT full_name, national_id, phone, address, district, division
+        FROM citizens WHERE id = :id
+    ");
+    $citizenStmt->execute([':id' => $citizenId]);
+    $citizen = $citizenStmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$citizen) {
+        json_exit(false, 'Citizen record not found.');
+    }
+
+    // Build complainant address
+    $complainantAddress = implode(', ', array_filter([
+        $citizen['district'],
+        $citizen['division'],
+        $citizen['address'],
+    ]));
+
+    // Generate case number: CF%03d-YYYY
     $year = date('Y');
     $prefix = "CF%{$year}";
 
@@ -82,17 +100,59 @@ try {
     }
     $caseNumber = sprintf('CF%03d-%s', $nextNum, $year);
 
+    // Generate FIR number: FIR-HQ01-YYYY-%05d
+    $firYear = date('Y');
+    $firPrefix = "FIR-HQ01-{$firYear}-%";
+
+    $firSeqStmt = $db->prepare("
+        SELECT fir_number FROM cases
+        WHERE fir_number LIKE :prefix
+        ORDER BY id DESC LIMIT 1
+    ");
+    $firSeqStmt->execute([':prefix' => $firPrefix]);
+    $lastFir = $firSeqStmt->fetch();
+
+    $firNextNum = 1;
+    if ($lastFir && preg_match('/FIR-HQ01-\d+-(\d+)/', $lastFir['fir_number'], $fm)) {
+        $firNextNum = (int)$fm[1] + 1;
+    }
+    $firNumber = sprintf('FIR-HQ01-%s-%05d', $firYear, $firNextNum);
+
     $insert = $db->prepare("
-        INSERT INTO cases (citizen_id, case_number, title, description, status, priority)
-        VALUES (:citizen_id, :case_number, :title, :description, 'open', :priority)
+        INSERT INTO cases (
+            citizen_id, case_number, title, description, status, priority,
+            fir_number, complainant_name, complainant_nid, complainant_phone,
+            complainant_address, incident_date, incident_time, incident_location,
+            incident_description, sections_applied, witness_details,
+            officer_id, station_code
+        ) VALUES (
+            :citizen_id, :case_number, :title, :description, 'open', :priority,
+            :fir_number, :complainant_name, :complainant_nid, :complainant_phone,
+            :complainant_address, :incident_date, :incident_time, :incident_location,
+            :incident_description, :sections_applied, :witness_details,
+            :officer_id, :station_code
+        )
     ");
 
     $insert->execute([
-        ':citizen_id'  => $citizenId,
-        ':case_number' => $caseNumber,
-        ':title'       => $title,
-        ':description' => $description,
-        ':priority'    => $priority,
+        ':citizen_id'           => $citizenId,
+        ':case_number'          => $caseNumber,
+        ':title'                => $title,
+        ':description'          => $description,
+        ':priority'             => $priority,
+        ':fir_number'           => $firNumber,
+        ':complainant_name'     => $citizen['full_name'],
+        ':complainant_nid'      => $citizen['national_id'],
+        ':complainant_phone'    => $citizen['phone'],
+        ':complainant_address'  => $complainantAddress,
+        ':incident_date'        => date('Y-m-d'),
+        ':incident_time'        => null,
+        ':incident_location'    => $title,
+        ':incident_description' => $title . "\n\n" . $description,
+        ':sections_applied'     => null,
+        ':witness_details'      => null,
+        ':officer_id'           => null,
+        ':station_code'         => 'HQ01',
     ]);
 
     $newId = (int)$db->lastInsertId();
