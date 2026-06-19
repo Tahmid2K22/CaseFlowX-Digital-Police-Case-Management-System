@@ -35,16 +35,66 @@ try {
     // Create cases table matching the main db.php schema
     $pdo->exec("CREATE TABLE IF NOT EXISTS cases (
         id              INTEGER PRIMARY KEY AUTOINCREMENT,
-        citizen_id      INTEGER NOT NULL,
+        citizen_id      INTEGER,
         case_number     TEXT    NOT NULL UNIQUE,
         title           TEXT    NOT NULL,
         description     TEXT    NOT NULL,
-        status          TEXT    NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','resolved','closed')),
+        status          TEXT    NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','resolved','closed','Draft','Submitted','Under Review','Registered','Rejected')),
         priority        TEXT    NOT NULL DEFAULT 'low' CHECK(priority IN ('low','medium','high')),
         created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
         investigator_id INTEGER,
+        fir_number      TEXT,
+        complainant_name TEXT,
+        complainant_nid  TEXT,
+        complainant_phone TEXT,
+        complainant_address TEXT,
+        incident_date    TEXT,
+        incident_time    TEXT,
+        incident_location TEXT,
+        incident_description TEXT,
+        sections_applied TEXT,
+        witness_details  TEXT,
+        officer_id       INTEGER,
+        station_code     TEXT,
+        investigating_officer TEXT,
+        modified_by      INTEGER,
+        modified_at      TEXT,
         FOREIGN KEY (citizen_id) REFERENCES users(id) ON DELETE CASCADE,
         FOREIGN KEY (investigator_id) REFERENCES users(id) ON DELETE SET NULL
+    )");
+
+    // Create fir_records table
+    $pdo->exec("CREATE TABLE IF NOT EXISTS fir_records (
+        id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+        fir_number              TEXT    NOT NULL UNIQUE,
+        complainant_name        TEXT    NOT NULL,
+        complainant_nid         TEXT    NOT NULL,
+        complainant_phone       TEXT,
+        complainant_address     TEXT,
+        incident_date           TEXT    NOT NULL,
+        incident_time           TEXT,
+        incident_location       TEXT    NOT NULL,
+        incident_description    TEXT    NOT NULL,
+        sections_applied        TEXT,
+        witness_details         TEXT,
+        officer_id              INTEGER,
+        station_code            TEXT    NOT NULL,
+        status                  TEXT    NOT NULL DEFAULT 'Draft' CHECK(status IN ('Draft','Submitted','Under Review','Registered','Rejected')),
+        priority                TEXT    NOT NULL DEFAULT 'medium' CHECK(priority IN ('low','medium','high')),
+        created_by              INTEGER,
+        created_at              TEXT    NOT NULL DEFAULT (datetime('now')),
+        modified_by             INTEGER,
+        modified_at             TEXT
+    )");
+
+    // Create notifications table
+    $pdo->exec("CREATE TABLE IF NOT EXISTS notifications (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id     INTEGER,
+        title       TEXT NOT NULL,
+        message     TEXT NOT NULL,
+        is_read     INTEGER DEFAULT 0,
+        created_at  TEXT NOT NULL DEFAULT (datetime('now'))
     )");
 } catch (Exception $e) {
     die("Test DB Setup Failed: " . $e->getMessage());
@@ -219,6 +269,60 @@ $stmt = $pdo->prepare("SELECT COUNT(*) FROM cases WHERE investigator_id IS NULL"
 $stmt->execute();
 $unassigned_cases_count = (int)$stmt->fetchColumn();
 assert_equals(1, $unassigned_cases_count, "Unassigned cases should not be visible to this investigator.");
+
+// 12. Admin Review, Approval, Rejection of FIRs (SCRUM-98 & SCRUM-102)
+// Seed mock FIR and corresponding case
+$pdo->prepare("INSERT INTO fir_records (fir_number, complainant_name, complainant_nid, incident_date, incident_location, incident_description, station_code, status, priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    ->execute(['FIR-DHAK-2026-00001', 'Citizen Tahmid', '1234567893', '2026-06-19', 'Dhanmondi', 'Burglary', 'DHAK', 'Submitted', 'medium']);
+
+$pdo->prepare("INSERT INTO cases (citizen_id, case_number, title, description, status, priority, fir_number) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    ->execute([1, 'CF004-2026', 'FIR Dhanmondi', 'Burglary', 'Submitted', 'medium', 'FIR-DHAK-2026-00001']);
+
+// Verify initial status is Submitted
+$stmt = $pdo->prepare("SELECT status FROM fir_records WHERE fir_number = 'FIR-DHAK-2026-00001'");
+$stmt->execute();
+assert_equals('Submitted', $stmt->fetchColumn(), "Initial FIR status should be Submitted.");
+
+// Simulate Admin Approval Action (update to Registered)
+$pdo->prepare("UPDATE fir_records SET status = 'Registered' WHERE fir_number = 'FIR-DHAK-2026-00001'")->execute();
+$pdo->prepare("UPDATE cases SET status = 'Registered' WHERE fir_number = 'FIR-DHAK-2026-00001'")->execute();
+
+// Check if status updated in both tables
+$stmt = $pdo->prepare("SELECT status FROM fir_records WHERE fir_number = 'FIR-DHAK-2026-00001'");
+$stmt->execute();
+assert_equals('Registered', $stmt->fetchColumn(), "Approved FIR status should update to Registered.");
+
+$stmt = $pdo->prepare("SELECT status FROM cases WHERE fir_number = 'FIR-DHAK-2026-00001'");
+$stmt->execute();
+assert_equals('Registered', $stmt->fetchColumn(), "Approved corresponding case status should update to Registered.");
+
+// Simulate Notification insertion on approval (SCRUM-101)
+$pdo->prepare("INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)")
+    ->execute([1, 'FIR Approved', 'FIR FIR-DHAK-2026-00001 approved.']);
+
+// Verify notification count
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = 1 AND title = 'FIR Approved'");
+$stmt->execute();
+assert_equals(1, (int)$stmt->fetchColumn(), "Notification should be successfully generated for citizen.");
+
+// Simulate Admin Rejection Action (update to Rejected)
+$pdo->prepare("INSERT INTO fir_records (fir_number, complainant_name, complainant_nid, incident_date, incident_location, incident_description, station_code, status, priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    ->execute(['FIR-DHAK-2026-00002', 'Citizen Karim', '1234567895', '2026-06-19', 'Gulshan', 'Theft', 'DHAK', 'Submitted', 'low']);
+
+$pdo->prepare("INSERT INTO cases (citizen_id, case_number, title, description, status, priority, fir_number) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    ->execute([1, 'CF005-2026', 'FIR Gulshan', 'Theft', 'Submitted', 'low', 'FIR-DHAK-2026-00002']);
+
+$pdo->prepare("UPDATE fir_records SET status = 'Rejected' WHERE fir_number = 'FIR-DHAK-2026-00002'")->execute();
+$pdo->prepare("UPDATE cases SET status = 'Rejected' WHERE fir_number = 'FIR-DHAK-2026-00002'")->execute();
+
+// Check if status updated to Rejected in both tables
+$stmt = $pdo->prepare("SELECT status FROM fir_records WHERE fir_number = 'FIR-DHAK-2026-00002'");
+$stmt->execute();
+assert_equals('Rejected', $stmt->fetchColumn(), "Rejected FIR status should update to Rejected.");
+
+$stmt = $pdo->prepare("SELECT status FROM cases WHERE fir_number = 'FIR-DHAK-2026-00002'");
+$stmt->execute();
+assert_equals('Rejected', $stmt->fetchColumn(), "Rejected corresponding case status should update to Rejected.");
 
 echo PHP_EOL;
 echo COLOR_CYAN . "=========================================================" . COLOR_RESET . PHP_EOL;
