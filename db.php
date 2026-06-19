@@ -365,3 +365,6 @@ function require_officer(): array {
 
     return $officer;
 }
+
+$pdo = get_db();
+
