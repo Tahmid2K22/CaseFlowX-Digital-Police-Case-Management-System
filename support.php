@@ -15,24 +15,30 @@ if (!is_logged_in() && (empty($_SESSION['logged_in']) || empty($_SESSION['citize
     exit;
 }
 ?>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-<script src="https://cdn.tailwindcss.com"></script>
-<script>
-  tailwind.config = {
-    theme: {
-      extend: {
-        colors: {
-          navy:   '#1B2A4A',
-          accent: '#1D9E75',
-          'accent-dark': '#0F6E56',
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Support — CaseFlowX</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy:   '#1B2A4A',
+            accent: '#1D9E75',
+            'accent-dark': '#0F6E56',
+          }
         }
       }
     }
-  }
-</script>
-
-<div class="min-h-[calc(100vh-200px)] bg-[#F4F6F9]">
-  <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  </script>
+</head>
+<body class="bg-[#F4F6F9] min-h-screen flex flex-col justify-between">
+  <div class="flex-grow">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <!-- Breadcrumb -->
     <div class="mb-5 flex items-center gap-2 text-sm text-gray-500">
       <a href="dashboard.php" class="hover:text-accent transition-colors flex items-center gap-1">
@@ -139,4 +145,14 @@ if (!is_logged_in() && (empty($_SESSION['logged_in']) || empty($_SESSION['citize
       <i class="ti ti-arrow-left text-xs"></i> Back to Dashboard
     </a>
   </div>
-</div>
+  </div>
+
+  <footer class="py-6 mt-8">
+    <div class="max-w-7xl mx-auto px-4 text-center">
+      <p class="text-xs text-gray-500 font-medium">
+        © 2026 CaseFlowX
+      </p>
+    </div>
+  </footer>
+</body>
+</html>

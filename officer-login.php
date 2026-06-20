@@ -9,24 +9,30 @@
      ═══════════════════════════════════════════════════════════════════════════ -->
 
 <!-- Tailwind + Tabler -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-<script src="https://cdn.tailwindcss.com"></script>
-<script>
-  tailwind.config = {
-    theme: {
-      extend: {
-        colors: {
-          navy:   '#1B2A4A',
-          accent: '#1D9E75',
-          'accent-dark': '#0F6E56',
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FIR Officer Login — CaseFlowX</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy:   '#1B2A4A',
+            accent: '#1D9E75',
+            'accent-dark': '#0F6E56',
+          }
         }
       }
     }
-  }
-</script>
-
-<!-- ── Page content ─────────────────────────────────────────────────────── -->
-<div class="min-h-screen bg-[#F4F6F9] py-10 px-4">
+  </script>
+</head>
+<body class="bg-[#F4F6F9] min-h-screen flex flex-col justify-between">
+  <div class="flex-grow">
+    <div class="min-h-screen bg-[#F4F6F9] py-10 px-4">
 
   <!-- Breadcrumb -->
   <div class="max-w-md mx-auto mb-5 flex items-center gap-2 text-sm text-gray-500">
@@ -140,6 +146,16 @@
 
   </div><!-- /card -->
 </div>
+  </div>
+</div>
+
+<footer class="bg-navy border-t border-white/10 py-6 mt-8">
+  <div class="max-w-7xl mx-auto px-4 text-center">
+    <p class="text-xs text-[#8FA3C8]">
+      © 2026 CaseFlowX
+    </p>
+  </div>
+</footer>
 
 <!-- ── JavaScript ───────────────────────────────────────────────────────── -->
 <script>
@@ -195,7 +211,6 @@ function validateForm() {
   return ok;
 }
 
-/* ── Form submission ─────────────────────────────────────────────────────── */
 document.getElementById('login-form').addEventListener('submit', async function(e) {
   e.preventDefault();
   clearErrors();
@@ -239,3 +254,5 @@ document.getElementById('login-form').addEventListener('submit', async function(
   }
 });
 </script>
+</body>
+</html>

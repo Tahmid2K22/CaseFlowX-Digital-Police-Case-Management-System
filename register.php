@@ -18,7 +18,7 @@ $t = [
         'btn_submit' => 'Register User',
         'back_dashboard' => 'Back to User Directory',
         'logged_as' => 'Logged in as',
-        'copyright' => '2025 CaseFlowX — Case Management Platform',
+        'copyright' => '2026 CaseFlowX',
         
         // Steps
         'step1_title' => 'Personal Info',
@@ -62,7 +62,7 @@ $t = [
         'btn_submit' => 'নিবন্ধন সম্পন্ন করুন',
         'back_dashboard' => 'ব্যবহারকারী তালিকায় ফিরে যান',
         'logged_as' => 'লগইন আছেন',
-        'copyright' => '২০২৫ কেসফ্লোএক্স — মামলা ব্যবস্থাপনা প্ল্যাটফর্ম',
+        'copyright' => '২০২৬ কেসফ্লোএক্স',
         
         // Steps
         'step1_title' => 'ব্যক্তিগত তথ্য',
