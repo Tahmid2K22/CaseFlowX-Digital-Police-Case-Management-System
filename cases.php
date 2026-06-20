@@ -61,24 +61,30 @@ function priorityBadge(string $priority): string {
     return "<span class=\"text-xs font-medium {$cls}\">" . ucfirst($priority) . "</span>";
 }
 ?>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-<script src="https://cdn.tailwindcss.com"></script>
-<script>
-  tailwind.config = {
-    theme: {
-      extend: {
-        colors: {
-          navy:   '#1B2A4A',
-          accent: '#1D9E75',
-          'accent-dark': '#0F6E56',
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>My Cases — CaseFlowX</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy:   '#1B2A4A',
+            accent: '#1D9E75',
+            'accent-dark': '#0F6E56',
+          }
         }
       }
     }
-  }
-</script>
-
-<div class="min-h-[calc(100vh-200px)] bg-[#F4F6F9]">
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  </script>
+</head>
+<body class="bg-[#F4F6F9] min-h-screen flex flex-col justify-between">
+  <div class="flex-grow">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
       <div>
@@ -136,4 +142,13 @@ function priorityBadge(string $priority): string {
       </div>
     </div>
   </div>
-</div>
+
+  <footer class="py-6 mt-8">
+    <div class="max-w-7xl mx-auto px-4 text-center">
+      <p class="text-xs text-gray-500 font-medium">
+        © 2026 CaseFlowX
+      </p>
+    </div>
+  </footer>
+</body>
+</html>
