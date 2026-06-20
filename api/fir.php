@@ -123,8 +123,12 @@ try {
     
     $case_id = $db->lastInsertId();
     
+    // Log case created timeline event
+    add_case_timeline_event($db, $case_id, 'created', 'FIR Filed / Case Created', 'The complaint was successfully filed and registered as a case.', $officer['full_name']);
+
     // Handle evidence IDs
     $evidence_ids = $_POST['evidence_ids'] ?? [];
+    $uploaded_ev = [];
     foreach ($evidence_ids as $fileName) {
         $filePath = 'uploads/' . $fileName;
         $fullPath = __DIR__ . '/../' . $filePath;
@@ -137,7 +141,12 @@ try {
                 VALUES (?, ?, ?, ?, ?, ?)
             ");
             $stmtEv->execute([$case_id, basename($fileName), $filePath, $ftype, $fsize, $officer['id']]);
+            $uploaded_ev[] = basename($fileName);
         }
+    }
+
+    if (!empty($uploaded_ev)) {
+        add_case_timeline_event($db, $case_id, 'evidence_uploaded', 'Evidence Uploaded', 'Evidence files attached: ' . implode(', ', $uploaded_ev), $officer['full_name']);
     }
     
     echo json_encode([
