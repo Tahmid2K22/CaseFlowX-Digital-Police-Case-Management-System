@@ -12,6 +12,7 @@ try {
     $pdo = new PDO("sqlite:$test_db_path");
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+    $pdo->exec('PRAGMA foreign_keys = ON');
     
     // Create users table matching the main db.php schema
     $pdo->exec("CREATE TABLE IF NOT EXISTS users (
@@ -95,6 +96,18 @@ try {
         message     TEXT NOT NULL,
         is_read     INTEGER DEFAULT 0,
         created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    )");
+
+    // Create case_timeline table
+    $pdo->exec("CREATE TABLE IF NOT EXISTS case_timeline (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        case_id         INTEGER NOT NULL,
+        event_type      TEXT    NOT NULL CHECK(event_type IN ('created', 'status_change', 'investigator_assigned', 'evidence_uploaded', 'note_added', 'other')),
+        title           TEXT    NOT NULL,
+        description     TEXT,
+        created_by_name TEXT,
+        created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
     )");
 } catch (Exception $e) {
     die("Test DB Setup Failed: " . $e->getMessage());
@@ -323,6 +336,57 @@ assert_equals('Rejected', $stmt->fetchColumn(), "Rejected FIR status should upda
 $stmt = $pdo->prepare("SELECT status FROM cases WHERE fir_number = 'FIR-DHAK-2026-00002'");
 $stmt->execute();
 assert_equals('Rejected', $stmt->fetchColumn(), "Rejected corresponding case status should update to Rejected.");
+
+// 13. Case File & Timeline viewing functionality tests (SCRUM-104 & SCRUM-105 & SCRUM-109)
+echo COLOR_CYAN . "=== Running Timeline & Case Access Tests (SCRUM-109) ===" . COLOR_RESET . PHP_EOL;
+
+// A. Mocking access control checks
+$assigned_case = ['id' => 101, 'investigator_id' => 4];
+$other_case = ['id' => 102, 'investigator_id' => 5];
+$unassigned_case = ['id' => 103, 'investigator_id' => null];
+
+function simulate_case_details_access($user_role, $user_id, $case) {
+    if ($user_role === 'Admin' || $user_role === 'Officer') {
+        return true;
+    } elseif ($user_role === 'Investigator') {
+        return ((int)$case['investigator_id'] === (int)$user_id);
+    }
+    return false;
+}
+
+assert_true(simulate_case_details_access('Investigator', 4, $assigned_case), "Investigator should be allowed access to their assigned case.");
+assert_true(!simulate_case_details_access('Investigator', 4, $other_case), "Investigator should be denied access to cases assigned to other investigators.");
+assert_true(!simulate_case_details_access('Investigator', 4, $unassigned_case), "Investigator should be denied access to unassigned cases.");
+assert_true(simulate_case_details_access('Admin', 4, $other_case), "Admin should be allowed access to any case.");
+
+// B. Database Model Verification (Case Timeline)
+// Insert a case first
+$pdo->prepare("INSERT INTO cases (id, citizen_id, case_number, title, description, status, priority) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    ->execute([200, 1, 'CF-TEST-TIMELINE', 'Timeline Test Case', 'Testing timeline', 'open', 'low']);
+
+// Insert timeline events
+$pdo->prepare("INSERT INTO case_timeline (case_id, event_type, title, description, created_by_name) VALUES (?, ?, ?, ?, ?)")
+    ->execute([200, 'created', 'Case Filed', 'Registered by citizen', 'Citizen Tahmid']);
+
+$pdo->prepare("INSERT INTO case_timeline (case_id, event_type, title, description, created_by_name) VALUES (?, ?, ?, ?, ?)")
+    ->execute([200, 'status_change', 'Status Updated', 'Accepted by Officer', 'Officer Mahbub']);
+
+// Fetch timeline events
+$stmt = $pdo->prepare("SELECT * FROM case_timeline WHERE case_id = ? ORDER BY id ASC");
+$stmt->execute([200]);
+$events = $stmt->fetchAll();
+
+assert_equals(2, count($events), "Case should have exactly 2 timeline events.");
+assert_equals('created', $events[0]['event_type'], "First event type should be 'created'.");
+assert_equals('Case Filed', $events[0]['title'], "First event title should be 'Case Filed'.");
+assert_equals('Citizen Tahmid', $events[0]['created_by_name'], "First event creator should be 'Citizen Tahmid'.");
+assert_equals('status_change', $events[1]['event_type'], "Second event type should be 'status_change'.");
+
+// C. Verify Cascade Delete
+$pdo->prepare("DELETE FROM cases WHERE id = ?")->execute([200]);
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM case_timeline WHERE case_id = ?");
+$stmt->execute([200]);
+assert_equals(0, (int)$stmt->fetchColumn(), "Associated timeline events should be cascade-deleted when case is deleted.");
 
 echo PHP_EOL;
 echo COLOR_CYAN . "=========================================================" . COLOR_RESET . PHP_EOL;

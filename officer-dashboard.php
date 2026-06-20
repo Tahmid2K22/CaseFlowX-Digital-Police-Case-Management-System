@@ -75,7 +75,8 @@ try {
   }
 </script>
 </head>
-<body class="min-h-screen bg-[#F4F6F9] pb-12">
+<body class="bg-[#F4F6F9] min-h-screen flex flex-col justify-between">
+  <div class="flex-grow">
 
 <!-- Premium Header -->
 <header class="bg-navy text-white shadow-md">
@@ -498,5 +499,14 @@ document.getElementById('assign-form').addEventListener('submit', async function
   }
 });
 </script>
+  </div>
+
+  <footer class="py-6 mt-8">
+    <div class="max-w-7xl mx-auto px-4 text-center">
+      <p class="text-xs text-gray-500 font-medium">
+        © 2026 CaseFlowX
+      </p>
+    </div>
+  </footer>
 </body>
 </html>

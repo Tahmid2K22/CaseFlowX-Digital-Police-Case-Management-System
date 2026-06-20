@@ -157,6 +157,8 @@ try {
 
     $newId = (int)$db->lastInsertId();
 
+    add_case_timeline_event($db, $newId, 'created', 'Case Created', 'Complaint submitted online by citizen.', $citizen['full_name']);
+
     json_exit(true, 'Case filed successfully.', [
         'case_id'     => $newId,
         'case_number' => $caseNumber,

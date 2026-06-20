@@ -187,6 +187,7 @@ function init_schema(PDO $pdo): void {
 
     // Dynamic migration: Ensure all required columns exist in the cases table
     $requiredCaseCols = [
+        'investigator_id'       => 'INTEGER',
         'fir_number'            => 'TEXT',
         'complainant_name'      => 'TEXT',
         'complainant_nid'       => 'TEXT',
@@ -316,6 +317,82 @@ function init_schema(PDO $pdo): void {
             created_at  TEXT NOT NULL DEFAULT (datetime('now'))
         )
     ");
+
+    // Case Timeline table
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS case_timeline (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            case_id         INTEGER NOT NULL,
+            event_type      TEXT    NOT NULL CHECK(event_type IN ('created', 'status_change', 'investigator_assigned', 'evidence_uploaded', 'note_added', 'other')),
+            title           TEXT    NOT NULL,
+            description     TEXT,
+            created_by_name TEXT,
+            created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
+        )
+    ");
+
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_timeline_case ON case_timeline(case_id)');
+
+    // Backfill from existing cases if timeline table is empty
+    try {
+        $stmtCount = $pdo->query("SELECT COUNT(*) FROM case_timeline");
+        $timelineCount = (int)$stmtCount->fetchColumn();
+        if ($timelineCount === 0) {
+            $stmtCases = $pdo->query("SELECT id, title, description, status, investigator_id, investigating_officer, created_at, complainant_name FROM cases");
+            $existingCases = $stmtCases->fetchAll();
+            foreach ($existingCases as $c) {
+                // 1. Created event
+                $pdo->prepare("
+                    INSERT INTO case_timeline (case_id, event_type, title, description, created_by_name, created_at)
+                    VALUES (?, 'created', 'Case Created', 'Complaint registered in the system.', ?, ?)
+                ")->execute([
+                    $c['id'],
+                    $c['complainant_name'] ?: 'Citizen',
+                    $c['created_at'] ?: date('Y-m-d H:i:s')
+                ]);
+
+                // 2. Investigator assigned event (if assigned)
+                if (!empty($c['investigating_officer'])) {
+                    $pdo->prepare("
+                        INSERT INTO case_timeline (case_id, event_type, title, description, created_by_name, created_at)
+                        VALUES (?, 'investigator_assigned', 'Investigator Assigned', ?, 'System', ?)
+                    ")->execute([
+                        $c['id'],
+                        "Investigator assigned: " . $c['investigating_officer'],
+                        $c['created_at'] ?: date('Y-m-d H:i:s')
+                    ]);
+                }
+
+                // 3. Status change event (if not open/Submitted/Draft)
+                if (!in_array($c['status'], ['open', 'Submitted', 'Draft'], true)) {
+                    $pdo->prepare("
+                        INSERT INTO case_timeline (case_id, event_type, title, description, created_by_name, created_at)
+                        VALUES (?, 'status_change', ?, ?, 'System', ?)
+                    ")->execute([
+                        $c['id'],
+                        "Status updated to: " . ucfirst(str_replace('_', ' ', $c['status'])),
+                        "Case status changed to " . $c['status'] . ".",
+                        $c['created_at'] ?: date('Y-m-d H:i:s')
+                    ]);
+                }
+            }
+        }
+
+        // Backfill empty fir_number for existing cases
+        $stmtEmpty = $pdo->query("SELECT id FROM cases WHERE fir_number IS NULL OR fir_number = ''");
+        $emptyCases = $stmtEmpty->fetchAll();
+        if (count($emptyCases) > 0) {
+            $updateStmt = $pdo->prepare("UPDATE cases SET fir_number = ? WHERE id = ?");
+            $i = 1;
+            foreach ($emptyCases as $ec) {
+                $generatedFir = sprintf("FIR-HQ01-2026-%05d", $i++);
+                $updateStmt->execute([$generatedFir, $ec['id']]);
+            }
+        }
+    } catch (PDOException $ex) {
+        error_log('[CaseFlowX] Backfill migration failed: ' . $ex->getMessage());
+    }
 }
 
 function require_citizen(): array {
@@ -381,4 +458,17 @@ function require_officer(): array {
 }
 
 $pdo = get_db();
+
+function add_case_timeline_event(PDO $db, int $caseId, string $eventType, string $title, string $description, ?string $createdByName = null): bool {
+    try {
+        $stmt = $db->prepare("
+            INSERT INTO case_timeline (case_id, event_type, title, description, created_by_name, created_at)
+            VALUES (?, ?, ?, ?, ?, datetime('now'))
+        ");
+        return $stmt->execute([$caseId, $eventType, $title, $description, $createdByName]);
+    } catch (PDOException $e) {
+        error_log('[CaseFlowX] Failed to add timeline event: ' . $e->getMessage());
+        return false;
+    }
+}
 

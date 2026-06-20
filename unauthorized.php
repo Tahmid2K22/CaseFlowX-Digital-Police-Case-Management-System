@@ -123,7 +123,7 @@ $cur = $t[$lang];
     <footer class="bg-navy border-t border-white/10 py-6">
         <div class="max-w-7xl mx-auto px-4 text-center">
             <p class="text-xs text-[#8FA3C8]">
-                <i class="ti ti-copyright text-[11px] inline-block mr-0.5"></i> 2025 CaseFlowX — Case Management Platform
+                © 2026 CaseFlowX
             </p>
         </div>
     </footer>

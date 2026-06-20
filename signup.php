@@ -25,7 +25,7 @@ $t = [
         'btn_prev' => 'Previous',
         'btn_submit' => 'Register Account',
         'back_login' => 'Back to Login',
-        'copyright' => '2025 CaseFlowX — Case Management Platform',
+        'copyright' => '2026 CaseFlowX',
         
         // Steps
         'step1_title' => 'Personal Info',
@@ -68,7 +68,7 @@ $t = [
         'btn_prev' => 'পূর্ববর্তী',
         'btn_submit' => 'নিবন্ধন সম্পন্ন করুন',
         'back_login' => 'লগইনে ফিরে যান',
-        'copyright' => '২০২৫ কেসফ্লোএক্স — মামলা ব্যবস্থাপনা প্ল্যাটফর্ম',
+        'copyright' => '২০২৬ কেসফ্লোএক্স',
         
         // Steps
         'step1_title' => 'ব্যক্তিগত তথ্য',
@@ -564,7 +564,7 @@ $cur = $t[$lang];
     <footer class="bg-navy border-t border-white/10 py-6 mt-12">
         <div class="max-w-7xl mx-auto px-4 text-center">
             <p class="text-xs text-[#8FA3C8]">
-                <i class="ti ti-copyright text-[11px] inline-block mr-0.5"></i> 2025 CaseFlowX — Case Management Platform
+                <i class="ti ti-copyright text-[11px] inline-block mr-0.5"></i> <?php echo $cur['copyright']; ?>
             </p>
         </div>
     </footer>

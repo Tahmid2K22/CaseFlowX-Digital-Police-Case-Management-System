@@ -469,6 +469,14 @@ $initials  = strtoupper(implode('', array_map(fn($w) => !empty($w) ? $w[0] : '',
             </div>
         </div>
     </div>
+
+    <footer class="py-6 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <p class="text-xs text-gray-500 font-medium">
+                © 2026 CaseFlowX
+            </p>
+        </div>
+    </footer>
 </main>
 
 <!-- Rejection Reason Modal -->
