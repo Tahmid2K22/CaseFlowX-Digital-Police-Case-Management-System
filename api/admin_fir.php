@@ -55,6 +55,9 @@ try {
 
         // Create notifications
         if ($caseInfo) {
+            // Log case approved timeline event
+            add_case_timeline_event($db, (int)$caseInfo['id'], 'status_change', 'FIR Approved', 'The FIR has been approved by the Administrator and is now registered.', $_SESSION['username'] ?? 'System Admin');
+
             $title = "FIR Approved";
             $msg = "FIR " . $fir['fir_number'] . " has been approved by the Administrator and is now registered.";
             
@@ -91,6 +94,9 @@ try {
 
         // Create notifications
         if ($caseInfo) {
+            // Log case rejected timeline event
+            add_case_timeline_event($db, (int)$caseInfo['id'], 'status_change', 'FIR Rejected', 'The FIR was rejected by the Administrator.' . ($reason ? ' Reason: ' . $reason : ''), $_SESSION['username'] ?? 'System Admin');
+
             $title = "FIR Rejected";
             $msg = "FIR " . $fir['fir_number'] . " was rejected by the Administrator." . ($reason ? " Reason: " . $reason : "");
             
