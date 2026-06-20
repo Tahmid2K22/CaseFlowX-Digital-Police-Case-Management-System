@@ -96,25 +96,30 @@ function priorityBadge(string $priority): string {
      ═══════════════════════════════════════════════════════════════════════════ -->
 
 <!-- Tailwind + Tabler -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-<script src="https://cdn.tailwindcss.com"></script>
-<script>
-  tailwind.config = {
-    theme: {
-      extend: {
-        colors: {
-          navy:   '#1B2A4A',
-          accent: '#1D9E75',
-          'accent-dark': '#0F6E56',
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Citizen Dashboard — CaseFlowX</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy:   '#1B2A4A',
+            accent: '#1D9E75',
+            'accent-dark': '#0F6E56',
+          }
         }
       }
     }
-  }
-</script>
-
-<!-- ── Dashboard Content (for master.html integration) ─────────────────── -->
-<div class="bg-[#F4F6F9] min-h-[calc(100vh-200px)]">
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  </script>
+</head>
+<body class="bg-[#F4F6F9] min-h-screen flex flex-col justify-between">
+  <div class="flex-grow">
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
     <!-- Welcome Section -->
     <div class="mb-8">
@@ -332,19 +337,14 @@ function priorityBadge(string $priority): string {
     </div>
 
   </main>
+  </div>
 
-  <!-- Footer -->
-  <footer class="bg-white border-t border-gray-200 mt-12">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <div class="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-500">
-        <p>&copy; <?= date('Y') ?> CaseFlowX. All rights reserved.</p>
-        <div class="flex items-center gap-4">
-          <a href="privacy.php" class="hover:text-accent transition">Privacy Policy</a>
-          <a href="terms.php" class="hover:text-accent transition">Terms of Use</a>
-          <a href="help.php" class="hover:text-accent transition">Help Center</a>
-        </div>
-      </div>
+  <footer class="py-6 mt-12">
+    <div class="max-w-7xl mx-auto px-4 text-center">
+      <p class="text-xs text-gray-500 font-medium">
+        © 2026 CaseFlowX
+      </p>
     </div>
   </footer>
-
-</div>
+</body>
+</html>
