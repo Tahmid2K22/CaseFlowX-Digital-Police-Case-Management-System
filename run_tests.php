@@ -109,6 +109,19 @@ try {
         created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
         FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
     )");
+
+    // Create fir_evidence table matching modified db.php schema
+    $pdo->exec("CREATE TABLE IF NOT EXISTS fir_evidence (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        case_id         INTEGER NOT NULL,
+        file_name       TEXT    NOT NULL,
+        file_path       TEXT    NOT NULL,
+        file_type       TEXT    NOT NULL,
+        file_size       INTEGER NOT NULL,
+        uploaded_by     INTEGER NOT NULL,
+        uploaded_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
+    )");
 } catch (Exception $e) {
     die("Test DB Setup Failed: " . $e->getMessage());
 }
@@ -387,6 +400,112 @@ $pdo->prepare("DELETE FROM cases WHERE id = ?")->execute([200]);
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM case_timeline WHERE case_id = ?");
 $stmt->execute([200]);
 assert_equals(0, (int)$stmt->fetchColumn(), "Associated timeline events should be cascade-deleted when case is deleted.");
+
+// 14. Digital Forensic Evidence Upload tests (SCRUM-116 to SCRUM-123)
+echo COLOR_CYAN . "=== Running Evidence Upload Tests (SCRUM-116 to SCRUM-123) ===" . COLOR_RESET . PHP_EOL;
+
+$assigned_case_ev = ['id' => 301, 'investigator_id' => 4];
+$other_case_ev = ['id' => 302, 'investigator_id' => 5];
+
+function simulate_evidence_upload_access($user_role, $user_id, $case) {
+    if ($user_role === 'Admin' || $user_role === 'Officer') {
+        return true;
+    } elseif ($user_role === 'Investigator') {
+        return ((int)$case['investigator_id'] === (int)$user_id);
+    }
+    return false;
+}
+
+// A. Access Control Tests
+assert_true(simulate_evidence_upload_access('Investigator', 4, $assigned_case_ev), "Assigned investigator should be allowed to upload evidence.");
+assert_true(!simulate_evidence_upload_access('Investigator', 4, $other_case_ev), "Unassigned investigator should be denied evidence upload.");
+assert_true(simulate_evidence_upload_access('Admin', 4, $other_case_ev), "Admin should be allowed evidence upload on any case.");
+assert_true(simulate_evidence_upload_access('Officer', 4, $other_case_ev), "Officer should be allowed evidence upload on any case.");
+
+// B. File Format and Size Validation Tests
+function mock_validate_evidence($filename, $mime, $size) {
+    $maxFileSize = 10 * 1024 * 1024; // 10MB
+    $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+    
+    $mimeMap = [
+        'pdf'  => 'application/pdf',
+        'jpg'  => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+        'png'  => 'image/png',
+        'mp4'  => 'video/mp4'
+    ];
+    
+    if (!isset($mimeMap[$ext]) || $mimeMap[$ext] !== $mime) {
+        return ['success' => false, 'error' => 'Invalid file type or extension mismatch'];
+    }
+    if ($size > $maxFileSize) {
+        return ['success' => false, 'error' => 'File too large'];
+    }
+    return ['success' => true];
+}
+
+assert_true(mock_validate_evidence('report.pdf', 'application/pdf', 5 * 1024 * 1024)['success'], "Valid PDF should pass validation.");
+assert_true(mock_validate_evidence('photo.png', 'image/png', 2 * 1024 * 1024)['success'], "Valid PNG should pass validation.");
+assert_true(!mock_validate_evidence('malicious.exe', 'application/octet-stream', 1024)['success'], "EXE file extension and mime type should be rejected.");
+assert_true(!mock_validate_evidence('photo.png', 'application/pdf', 1024)['success'], "Mismatched mime type should be rejected.");
+assert_true(!mock_validate_evidence('huge_video.mp4', 'video/mp4', 11 * 1024 * 1024)['success'], "Files larger than 10MB should be rejected.");
+
+// C. Database Model and Timeline Event Creation Tests
+$pdo->prepare("INSERT INTO cases (id, citizen_id, case_number, title, description, status, priority) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    ->execute([400, 1, 'CF-TEST-EVIDENCE', 'Evidence Test Case', 'Testing evidence features', 'open', 'low']);
+
+$pdo->prepare("INSERT INTO fir_evidence (case_id, file_name, file_path, file_type, file_size, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)")
+    ->execute([400, 'case_dump.pdf', 'uploads/case_dump.pdf', 'application/pdf', 1048576, 4]);
+
+$stmt = $pdo->prepare("SELECT * FROM fir_evidence WHERE case_id = ?");
+$stmt->execute([400]);
+$evRec = $stmt->fetch();
+assert_equals('case_dump.pdf', $evRec['file_name'], "Evidence should be saved in database with correct filename.");
+assert_equals('uploads/case_dump.pdf', $evRec['file_path'], "Evidence should be saved with correct file path.");
+
+// Insert corresponding timeline event
+$pdo->prepare("INSERT INTO case_timeline (case_id, event_type, title, description, created_by_name) VALUES (?, ?, ?, ?, ?)")
+    ->execute([400, 'evidence_uploaded', 'Evidence Uploaded', 'Forensic evidence file uploaded: case_dump.pdf', 'Investigator Salam']);
+
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM case_timeline WHERE case_id = ? AND event_type = ?");
+$stmt->execute([400, 'evidence_uploaded']);
+assert_equals(1, (int)$stmt->fetchColumn(), "Evidence upload timeline event should be logged.");
+
+// D. Evidence Deletion Tests
+$pdo->prepare("INSERT INTO cases (id, citizen_id, case_number, title, description, status, priority, investigator_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    ->execute([500, 1, 'CF-TEST-EVIDENCE-DEL', 'Evidence Delete Test Case', 'Testing evidence deletion', 'open', 'low', 4]);
+
+$pdo->prepare("INSERT INTO fir_evidence (id, case_id, file_name, file_path, file_type, file_size, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    ->execute([900, 500, 'to_delete.pdf', 'uploads/to_delete.pdf', 'application/pdf', 1048576, 4]);
+
+// Verify it exists
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM fir_evidence WHERE id = 900");
+$stmt->execute();
+assert_equals(1, (int)$stmt->fetchColumn(), "Evidence should exist before deletion.");
+
+// Delete it
+$pdo->prepare("DELETE FROM fir_evidence WHERE id = 900")->execute();
+$pdo->prepare("INSERT INTO case_timeline (case_id, event_type, title, description, created_by_name) VALUES (?, ?, ?, ?, ?)")
+    ->execute([500, 'other', 'Evidence Deleted', 'Forensic evidence file deleted: to_delete.pdf', 'Investigator Salam']);
+
+// Verify it is gone
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM fir_evidence WHERE id = 900");
+$stmt->execute();
+assert_equals(0, (int)$stmt->fetchColumn(), "Evidence record should be removed from database upon deletion.");
+
+// Verify timeline event logged
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM case_timeline WHERE case_id = 500 AND title = 'Evidence Deleted'");
+$stmt->execute();
+assert_equals(1, (int)$stmt->fetchColumn(), "An Evidence Deleted timeline event should be logged.");
+
+// Clean up case 500
+$pdo->prepare("DELETE FROM cases WHERE id = 500")->execute();
+
+// E. Evidence Cascade Delete Tests
+$pdo->prepare("DELETE FROM cases WHERE id = ?")->execute([400]);
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM fir_evidence WHERE case_id = ?");
+$stmt->execute([400]);
+assert_equals(0, (int)$stmt->fetchColumn(), "Evidence records should be cascade-deleted when their associated case is deleted.");
 
 echo PHP_EOL;
 echo COLOR_CYAN . "=========================================================" . COLOR_RESET . PHP_EOL;

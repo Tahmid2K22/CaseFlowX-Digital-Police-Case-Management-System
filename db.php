@@ -270,30 +270,70 @@ function init_schema(PDO $pdo): void {
         )
     ");
 
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS fir_evidence (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            case_id         INTEGER NOT NULL,
-            file_name       TEXT    NOT NULL,
-            file_path       TEXT    NOT NULL,
-            file_type       TEXT    NOT NULL,
-            file_size       INTEGER NOT NULL,
-            uploaded_by     INTEGER NOT NULL,
-            uploaded_at     TEXT    NOT NULL DEFAULT (datetime('now')),
-            FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
-            FOREIGN KEY (uploaded_by) REFERENCES officers(id) ON DELETE RESTRICT
-        )
-    ");
-
-    // Dynamic migration: Ensure case_id column exists in fir_evidence table
+    // Dynamic migration: Ensure fir_evidence table does not have old officers FK or fir_id column, and recreate if needed
     try {
-        $existingEvCols = [];
-        $stmt = $pdo->query("PRAGMA table_info(fir_evidence)");
-        while ($row = $stmt->fetch()) {
-            $existingEvCols[] = $row['name'];
+        $hasOfficersFk = false;
+        $stmtFk = $pdo->query("PRAGMA foreign_key_list(fir_evidence)");
+        while ($row = $stmtFk->fetch()) {
+            if (($row['table'] ?? '') === 'officers') {
+                $hasOfficersFk = true;
+                break;
+            }
         }
-        if (!in_array('case_id', $existingEvCols, true)) {
-            $pdo->exec("ALTER TABLE fir_evidence ADD COLUMN case_id INTEGER");
+
+        // We also check if fir_id exists in table info
+        $hasFirId = false;
+        $stmtInfo = $pdo->query("PRAGMA table_info(fir_evidence)");
+        while ($row = $stmtInfo->fetch()) {
+            if (($row['name'] ?? '') === 'fir_id') {
+                $hasFirId = true;
+                break;
+            }
+        }
+
+        if ($hasOfficersFk || $hasFirId) {
+            // Rebuild fir_evidence to remove FK constraint and clean up columns
+            $pdo->exec("PRAGMA foreign_keys = OFF");
+            $pdo->exec("DROP TABLE IF EXISTS fir_evidence_old");
+            $pdo->exec("ALTER TABLE fir_evidence RENAME TO fir_evidence_old");
+            
+            $pdo->exec("
+                CREATE TABLE fir_evidence (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    case_id         INTEGER NOT NULL,
+                    file_name       TEXT    NOT NULL,
+                    file_path       TEXT    NOT NULL,
+                    file_type       TEXT    NOT NULL,
+                    file_size       INTEGER NOT NULL,
+                    uploaded_by     INTEGER NOT NULL,
+                    uploaded_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+                    FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
+                )
+            ");
+            
+            // Copy data if old table had rows, converting fir_id to case_id if case_id was null
+            $pdo->exec("
+                INSERT INTO fir_evidence (id, case_id, file_name, file_path, file_type, file_size, uploaded_by, uploaded_at)
+                SELECT id, COALESCE(case_id, fir_id, 0), file_name, file_path, file_type, file_size, uploaded_by, uploaded_at 
+                FROM fir_evidence_old
+            ");
+            $pdo->exec("DROP TABLE fir_evidence_old");
+            $pdo->exec("PRAGMA foreign_keys = ON");
+        } else {
+            // Re-assert table creation just in case it doesn't exist
+            $pdo->exec("
+                CREATE TABLE IF NOT EXISTS fir_evidence (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    case_id         INTEGER NOT NULL,
+                    file_name       TEXT    NOT NULL,
+                    file_path       TEXT    NOT NULL,
+                    file_type       TEXT    NOT NULL,
+                    file_size       INTEGER NOT NULL,
+                    uploaded_by     INTEGER NOT NULL,
+                    uploaded_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+                    FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
+                )
+            ");
         }
     } catch (PDOException $e) {
         error_log("Evidence table migration failed: " . $e->getMessage());

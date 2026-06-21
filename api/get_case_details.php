@@ -33,7 +33,9 @@ try {
                COALESCE(o.full_name, u_off.full_name) as officer_name,
                COALESCE(ct.full_name, u_cit.full_name) as citizen_name,
                COALESCE(ct.phone, u_cit.phone) as citizen_phone,
-               COALESCE(ct.email, u_cit.email) as citizen_email
+               COALESCE(ct.email, u_cit.email) as citizen_email,
+               COALESCE(ct.national_id, u_cit.national_id) as citizen_nid,
+               COALESCE(ct.address, u_cit.address) as citizen_address
         FROM cases c
         LEFT JOIN officers o ON c.officer_id = o.id
         LEFT JOIN citizens ct ON c.citizen_id = ct.id
