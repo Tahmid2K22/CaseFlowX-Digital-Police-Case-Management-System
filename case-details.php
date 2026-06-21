@@ -45,7 +45,9 @@ try {
                COALESCE(o.full_name, u_off.full_name) as officer_name,
                COALESCE(ct.full_name, u_cit.full_name) as citizen_name,
                COALESCE(ct.phone, u_cit.phone) as citizen_phone,
-               COALESCE(ct.email, u_cit.email) as citizen_email
+               COALESCE(ct.email, u_cit.email) as citizen_email,
+               COALESCE(ct.national_id, u_cit.national_id) as citizen_nid,
+               COALESCE(ct.address, u_cit.address) as citizen_address
         FROM cases c
         LEFT JOIN officers o ON c.officer_id = o.id
         LEFT JOIN citizens ct ON c.citizen_id = ct.id
@@ -242,19 +244,19 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
           <div>
             <span class="text-xs text-gray-400 font-semibold block">Full Name</span>
-            <span class="text-gray-800 font-semibold"><?= htmlspecialchars($case['complainant_name'] ?? $case['citizen_name'] ?? '—') ?></span>
+            <span class="text-gray-800 font-semibold"><?= htmlspecialchars(($case['complainant_name'] !== '' && $case['complainant_name'] !== null) ? $case['complainant_name'] : ($case['citizen_name'] ?: '—')) ?></span>
           </div>
           <div>
             <span class="text-xs text-gray-400 font-semibold block">National ID (NID)</span>
-            <span class="text-gray-800 font-medium"><?= htmlspecialchars($case['complainant_nid'] ?? '—') ?></span>
+            <span class="text-gray-800 font-medium"><?= htmlspecialchars(($case['complainant_nid'] !== '' && $case['complainant_nid'] !== null) ? $case['complainant_nid'] : ($case['citizen_nid'] ?: '—')) ?></span>
           </div>
           <div>
             <span class="text-xs text-gray-400 font-semibold block">Phone Number</span>
-            <span class="text-gray-800 font-medium"><?= htmlspecialchars($case['complainant_phone'] ?? '—') ?></span>
+            <span class="text-gray-800 font-medium"><?= htmlspecialchars(($case['complainant_phone'] !== '' && $case['complainant_phone'] !== null) ? $case['complainant_phone'] : ($case['citizen_phone'] ?: '—')) ?></span>
           </div>
           <div>
             <span class="text-xs text-gray-400 font-semibold block">Full Address</span>
-            <span class="text-gray-800"><?= htmlspecialchars($case['complainant_address'] ?? '—') ?></span>
+            <span class="text-gray-800"><?= htmlspecialchars(($case['complainant_address'] !== '' && $case['complainant_address'] !== null) ? $case['complainant_address'] : ($case['citizen_address'] ?: '—')) ?></span>
           </div>
         </div>
       </div>
@@ -298,37 +300,88 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
         <h2 class="text-navy font-bold text-lg border-b border-gray-100 pb-3 mb-4 flex items-center gap-2">
           <i class="ti ti-paperclip text-accent"></i> Case Evidence & Attachments
         </h2>
-        <?php if (count($evidenceList) > 0): ?>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <?php foreach ($evidenceList as $ev): 
-              $isImg = preg_match('/^image\//', $ev['file_type']);
-              $isPdf = ($ev['file_type'] === 'application/pdf');
-              $isMp4 = ($ev['file_type'] === 'video/mp4');
-              
-              $icon = 'ti-file text-gray-500';
-              $bg = 'bg-gray-100';
-              if ($isImg) { $icon = 'ti-photo text-green-600'; $bg = 'bg-green-50'; }
-              elseif ($isPdf) { $icon = 'ti-file-text text-red-500'; $bg = 'bg-red-50'; }
-              elseif ($isMp4) { $icon = 'ti-video text-purple-600'; $bg = 'bg-purple-50'; }
-            ?>
-              <div class="flex items-center justify-between p-3 border border-gray-100 rounded-xl hover:bg-gray-50 transition">
-                <div class="flex items-center gap-3 min-w-0">
-                  <div class="w-10 h-10 rounded-lg <?= $bg ?> flex items-center justify-center flex-shrink-0">
-                    <i class="ti <?= $icon ?> text-lg"></i>
+        <div id="evidence-list-container">
+          <?php if (count($evidenceList) > 0): ?>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <?php foreach ($evidenceList as $ev): 
+                $isImg = preg_match('/^image\//', $ev['file_type']);
+                $isPdf = ($ev['file_type'] === 'application/pdf');
+                $isMp4 = ($ev['file_type'] === 'video/mp4');
+                
+                $icon = 'ti-file text-gray-500';
+                $bg = 'bg-gray-100';
+                if ($isImg) { $icon = 'ti-photo text-green-600'; $bg = 'bg-green-50'; }
+                elseif ($isPdf) { $icon = 'ti-file-text text-red-500'; $bg = 'bg-red-50'; }
+                elseif ($isMp4) { $icon = 'ti-video text-purple-600'; $bg = 'bg-purple-50'; }
+              ?>
+                <div class="flex items-center justify-between p-3 border border-gray-100 rounded-xl hover:bg-gray-50 transition">
+                  <div class="flex items-center gap-3 min-w-0">
+                    <div class="w-10 h-10 rounded-lg <?= $bg ?> flex items-center justify-center flex-shrink-0">
+                      <i class="ti <?= $icon ?> text-lg"></i>
+                    </div>
+                    <div class="min-w-0">
+                      <p class="text-sm font-semibold text-gray-800 truncate" title="<?= htmlspecialchars($ev['file_name']) ?>"><?= htmlspecialchars($ev['file_name']) ?></p>
+                      <p class="text-xs text-gray-400"><?= number_format($ev['file_size'] / 1024, 1) ?> KB</p>
+                    </div>
                   </div>
-                  <div class="min-w-0">
-                    <p class="text-sm font-semibold text-gray-800 truncate"><?= htmlspecialchars($ev['file_name']) ?></p>
-                    <p class="text-xs text-gray-400"><?= number_format($ev['file_size'] / 1024, 1) ?> KB</p>
+                  <div class="flex items-center gap-2">
+                    <a href="<?= htmlspecialchars($ev['file_path']) ?>" target="_blank" class="w-8 h-8 rounded-full bg-navy/5 text-navy hover:bg-navy hover:text-white flex items-center justify-center transition" title="Download">
+                      <i class="ti ti-download text-sm"></i>
+                    </a>
+                    <?php if ($canUploadEvidence): ?>
+                      <button onclick="deleteEvidence(<?= (int)$ev['id'] ?>, this)" class="w-8 h-8 rounded-full bg-red-50 text-red-600 hover:bg-red-600 hover:text-white flex items-center justify-center transition" title="Delete">
+                        <i class="ti ti-trash text-sm"></i>
+                      </button>
+                    <?php endif; ?>
                   </div>
                 </div>
-                <a href="<?= htmlspecialchars($ev['file_path']) ?>" target="_blank" class="w-8 h-8 rounded-full bg-navy/5 text-navy hover:bg-navy hover:text-white flex items-center justify-center transition">
-                  <i class="ti ti-download text-sm"></i>
-                </a>
+              <?php endforeach; ?>
+            </div>
+          <?php else: ?>
+            <p class="text-gray-400 text-sm italic">No evidence files uploaded for this complaint.</p>
+          <?php endif; ?>
+        </div>
+
+        <?php
+          $canUploadEvidence = false;
+          if ($role === 'Admin' || $role === 'Officer') {
+              $canUploadEvidence = true;
+          } elseif ($role === 'Investigator' && (int)$case['investigator_id'] === (int)$_SESSION['user_id']) {
+              $canUploadEvidence = true;
+          } elseif (!empty($_SESSION['officer_id'])) {
+              $canUploadEvidence = true;
+          }
+          if ($canUploadEvidence):
+        ?>
+          <div class="mt-6 pt-6 border-t border-gray-100">
+            <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <i class="ti ti-upload text-accent text-sm"></i> Upload Digital Forensic Evidence
+            </h3>
+            <form id="evidence-upload-form" enctype="multipart/form-data" class="space-y-4">
+              <input type="hidden" name="case_id" value="<?= (int)$case['id'] ?>">
+              
+              <!-- Drag and drop zone style -->
+              <div class="border-2 border-dashed border-slate-200 hover:border-accent/50 rounded-2xl p-6 text-center cursor-pointer transition bg-slate-50/50 hover:bg-slate-50 relative group" id="drop-zone">
+                <input type="file" name="file" id="evidence-file-input" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" accept=".pdf,image/jpeg,image/png,video/mp4" required>
+                <div class="space-y-2 pointer-events-none">
+                  <div class="w-10 h-10 rounded-full bg-accent/10 text-accent flex items-center justify-center mx-auto text-lg group-hover:scale-110 transition">
+                    <i class="ti ti-cloud-upload"></i>
+                  </div>
+                  <p class="text-xs font-semibold text-slate-700" id="file-select-label">Drag & drop files here or click to browse</p>
+                  <p class="text-[10px] text-slate-400">Supported formats: PDF, JPG, PNG, MP4 (Max 10MB)</p>
+                </div>
               </div>
-            <?php endforeach; ?>
+              
+              <!-- Selected file preview/status -->
+              <div id="upload-status-banner" class="hidden p-3 rounded-xl text-[11px] font-semibold border"></div>
+
+              <div class="flex justify-end">
+                <button type="submit" id="upload-submit-btn" disabled class="bg-accent hover:bg-accent-dark text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shadow opacity-50 cursor-not-allowed">
+                  <i class="ti ti-arrow-up-bar"></i> Upload Evidence
+                </button>
+              </div>
+            </form>
           </div>
-        <?php else: ?>
-          <p class="text-gray-400 text-sm italic">No evidence files uploaded for this complaint.</p>
         <?php endif; ?>
       </div>
 
@@ -586,6 +639,92 @@ function renderTimeline(events) {
   }).join('');
 }
 
+// Render evidence files dynamically
+function renderEvidence(evidence, currentUser, caseObj) {
+  const container = document.getElementById('evidence-list-container');
+  if (!container) return;
+  
+  let canDelete = false;
+  if (currentUser) {
+    if (currentUser.role === 'Admin' || currentUser.role === 'Officer') {
+      canDelete = true;
+    } else if (currentUser.role === 'Investigator' && caseObj && parseInt(caseObj.investigator_id) === parseInt(currentUser.id)) {
+      canDelete = true;
+    }
+  }
+
+  if (evidence && evidence.length > 0) {
+    container.innerHTML = `
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 animate-in fade-in duration-300">
+        ${evidence.map(ev => {
+          const isImg = /^image\//.test(ev.file_type);
+          const isPdf = ev.file_type === 'application/pdf';
+          const isMp4 = ev.file_type === 'video/mp4';
+          
+          let icon = 'ti-file text-gray-500';
+          let bg = 'bg-gray-100';
+          if (isImg) { icon = 'ti-photo text-green-600'; bg = 'bg-green-50'; }
+          else if (isPdf) { icon = 'ti-file-text text-red-500'; bg = 'bg-red-50'; }
+          else if (isMp4) { icon = 'ti-video text-purple-600'; bg = 'bg-purple-50'; }
+          
+          const sizeKb = (ev.file_size / 1024).toFixed(1);
+          
+          return `
+            <div class="flex items-center justify-between p-3 border border-gray-100 rounded-xl hover:bg-gray-50 transition">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="w-10 h-10 rounded-lg ${bg} flex items-center justify-center flex-shrink-0">
+                  <i class="ti ${icon} text-lg"></i>
+                </div>
+                <div class="min-w-0">
+                  <p class="text-sm font-semibold text-gray-800 truncate" title="${escapeHTML(ev.file_name)}">${escapeHTML(ev.file_name)}</p>
+                  <p class="text-xs text-gray-400">${sizeKb} KB</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <a href="${escapeHTML(ev.file_path)}" target="_blank" class="w-8 h-8 rounded-full bg-navy/5 text-navy hover:bg-navy hover:text-white flex items-center justify-center transition" title="Download">
+                  <i class="ti ti-download text-sm"></i>
+                </a>
+                ${canDelete ? `
+                  <button onclick="deleteEvidence(${ev.id}, this)" class="w-8 h-8 rounded-full bg-red-50 text-red-600 hover:bg-red-600 hover:text-white flex items-center justify-center transition" title="Delete">
+                    <i class="ti ti-trash text-sm"></i>
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  } else {
+    container.innerHTML = `<p class="text-gray-400 text-sm italic">No evidence files uploaded for this complaint.</p>`;
+  }
+}
+
+async function deleteEvidence(evidenceId, btn) {
+  if (!confirm('Are you sure you want to delete this evidence file?')) return;
+  btn.disabled = true;
+  const oldContent = btn.innerHTML;
+  btn.innerHTML = '<i class="ti ti-loader-2 animate-spin text-sm"></i>';
+  
+  try {
+    const fd = new FormData();
+    fd.append('evidence_id', evidenceId);
+    const res = await fetch('api/delete_case_evidence.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+      await loadCaseData();
+    } else {
+      alert(data.error || 'Failed to delete evidence file');
+      btn.disabled = false;
+      btn.innerHTML = oldContent;
+    }
+  } catch (err) {
+    alert('Network error');
+    btn.disabled = false;
+    btn.innerHTML = oldContent;
+  }
+}
+
 // Load case details and timeline events from API
 async function loadCaseData() {
   const caseId = <?= $caseId ?>;
@@ -594,8 +733,9 @@ async function loadCaseData() {
     const data = await res.json();
     if (data.success) {
       renderTimeline(data.timeline);
+      renderEvidence(data.evidence, data.session_user, data.case);
     } else {
-      console.error('Failed to load timeline:', data.message);
+      console.error('Failed to load case data:', data.message);
       document.getElementById('timeline-count').textContent = 'Error loading';
     }
   } catch (err) {
@@ -631,6 +771,96 @@ document.addEventListener('DOMContentLoaded', () => {
       submitBtn.innerHTML = oldText;
     }
   });
+
+  // Client-side file validation and async upload
+  const fileInput = document.getElementById('evidence-file-input');
+  const uploadForm = document.getElementById('evidence-upload-form');
+  const uploadBtn = document.getElementById('upload-submit-btn');
+  const banner = document.getElementById('upload-status-banner');
+  const selectLabel = document.getElementById('file-select-label');
+
+  if (fileInput) {
+    fileInput.addEventListener('change', function(e) {
+      const file = this.files[0];
+      if (!file) {
+        banner.classList.add('hidden');
+        uploadBtn.disabled = true;
+        uploadBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        selectLabel.textContent = 'Drag & drop files here or click to browse';
+        return;
+      }
+
+      const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'mp4'];
+      const allowedMimeTypes = ['application/pdf', 'image/jpeg', 'image/png', 'video/mp4'];
+      const maxFileSize = 10 * 1024 * 1024; // 10MB
+      
+      const fileExtension = file.name.split('.').pop().toLowerCase();
+      const isValidExtension = allowedExtensions.includes(fileExtension);
+      const isValidMime = allowedMimeTypes.includes(file.type);
+      const isValidSize = file.size <= maxFileSize;
+
+      banner.classList.remove('hidden');
+      if (!isValidExtension || !isValidMime) {
+        banner.className = 'p-3 rounded-xl text-[11px] font-semibold border bg-red-50 text-red-700 border-red-200';
+        banner.textContent = 'Invalid file type. Only PDF, JPG, PNG, and MP4 are allowed.';
+        uploadBtn.disabled = true;
+        uploadBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        selectLabel.textContent = file.name;
+      } else if (!isValidSize) {
+        banner.className = 'p-3 rounded-xl text-[11px] font-semibold border bg-red-50 text-red-700 border-red-200';
+        banner.textContent = 'File is too large. Maximum size is 10MB.';
+        uploadBtn.disabled = true;
+        uploadBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        selectLabel.textContent = file.name;
+      } else {
+        banner.className = 'p-3 rounded-xl text-[11px] font-semibold border bg-green-50 text-green-700 border-green-200';
+        banner.textContent = `Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+        uploadBtn.disabled = false;
+        uploadBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        selectLabel.textContent = file.name;
+      }
+    });
+  }
+
+  if (uploadForm) {
+    uploadForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      uploadBtn.disabled = true;
+      const oldText = uploadBtn.innerHTML;
+      uploadBtn.innerHTML = '<i class="ti ti-loader-2 animate-spin text-sm"></i> Uploading…';
+
+      try {
+        const fd = new FormData(this);
+        const res = await fetch('api/upload_case_evidence.php', {
+          method: 'POST',
+          body: fd
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          banner.className = 'p-3 rounded-xl text-[11px] font-semibold border bg-green-50 text-green-700 border-green-200';
+          banner.textContent = 'Forensic evidence file uploaded successfully!';
+          uploadForm.reset();
+          selectLabel.textContent = 'Drag & drop files here or click to browse';
+          uploadBtn.classList.add('opacity-50', 'cursor-not-allowed');
+          await loadCaseData();
+          setTimeout(() => {
+            banner.classList.add('hidden');
+          }, 3000);
+        } else {
+          banner.className = 'p-3 rounded-xl text-[11px] font-semibold border bg-red-50 text-red-700 border-red-200';
+          banner.textContent = data.error || 'Failed to upload evidence.';
+          uploadBtn.disabled = false;
+        }
+      } catch (err) {
+        banner.className = 'p-3 rounded-xl text-[11px] font-semibold border bg-red-50 text-red-700 border-red-200';
+        banner.textContent = 'Network error during upload.';
+        uploadBtn.disabled = false;
+      } finally {
+        uploadBtn.innerHTML = oldText;
+      }
+    });
+  }
 });
 
 async function acceptCase(caseId, btn) {
