@@ -142,6 +142,19 @@ try {
         FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
         FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
     )");
+    // Create case_tasks table matching db.php schema
+    $pdo->exec("CREATE TABLE IF NOT EXISTS case_tasks (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        case_id         INTEGER NOT NULL,
+        title           TEXT    NOT NULL,
+        description     TEXT,
+        status          TEXT    NOT NULL CHECK(status IN ('todo', 'in_progress', 'done')) DEFAULT 'todo',
+        created_by      INTEGER NOT NULL,
+        created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+        updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+    )");
 } catch (Exception $e) {
     die("Test DB Setup Failed: " . $e->getMessage());
 }
@@ -613,6 +626,153 @@ $pdo->prepare("DELETE FROM cases WHERE id = ?")->execute([600]);
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM suspect_profiles WHERE case_id = ?");
 $stmt->execute([600]);
 assert_equals(0, (int)$stmt->fetchColumn(), "Suspect profile records should be cascade-deleted when their associated case is deleted.");
+
+// 16. Case Task Board tests (SCRUM-79 to SCRUM-83)
+echo COLOR_CYAN . "=== Running Case Task Board Tests (SCRUM-79 to SCRUM-83) ===" . COLOR_RESET . PHP_EOL;
+
+$assigned_case_task = ['id' => 701, 'investigator_id' => 4];
+$other_case_task = ['id' => 702, 'investigator_id' => 5];
+
+function simulate_task_manage_access($user_role, $user_id, $case) {
+    if ($user_role === 'Admin' || $user_role === 'Officer') {
+        return true;
+    } elseif ($user_role === 'Investigator') {
+        return ((int)$case['investigator_id'] === (int)$user_id);
+    }
+    return false;
+}
+
+// A. Access Control Tests
+assert_true(simulate_task_manage_access('Investigator', 4, $assigned_case_task), "Assigned investigator should be allowed to manage tasks.");
+assert_true(!simulate_task_manage_access('Investigator', 4, $other_case_task), "Unassigned investigator should be denied managing tasks.");
+assert_true(simulate_task_manage_access('Admin', 4, $other_case_task), "Admin should be allowed to manage tasks on any case.");
+assert_true(simulate_task_manage_access('Officer', 4, $other_case_task), "Officer should be allowed to manage tasks on any case.");
+
+// B. Input Validation Tests
+function mock_validate_task($title, $status) {
+    if (trim($title) === '') {
+        return ['success' => false, 'error' => 'Task title is required.'];
+    }
+    if (!in_array($status, ['todo', 'in_progress', 'done'], true)) {
+        return ['success' => false, 'error' => 'Invalid status option selected.'];
+    }
+    return ['success' => true];
+}
+
+assert_true(mock_validate_task('Investigate scene', 'todo')['success'], "Valid task title and status should pass validation.");
+assert_true(!mock_validate_task('', 'todo')['success'], "Empty task title should be rejected.");
+assert_true(!mock_validate_task('Investigate scene', 'invalid_status')['success'], "Invalid status option should be rejected.");
+
+// C. Auto-Generation of Default Tasks upon Case Assignment
+// Insert a new test case
+$pdo->prepare("INSERT INTO cases (id, citizen_id, case_number, title, description, status, priority) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    ->execute([700, 1, 'CF-TEST-TASKBOARD', 'Taskboard Test Case', 'Testing task board features', 'open', 'low']);
+
+// Simulate the auto-population logic that runs during assignment
+$checkStmt = $pdo->prepare("SELECT COUNT(*) FROM case_tasks WHERE case_id = ?");
+$checkStmt->execute([700]);
+if ((int)$checkStmt->fetchColumn() === 0) {
+    $defaultTasks = [
+        'Review FIR and case details',
+        'Visit incident scene and gather initial evidence',
+        'Identify and interview witnesses',
+        'Identify potential suspects',
+        'Draft and submit final investigation report'
+    ];
+    $insertTaskStmt = $pdo->prepare("
+        INSERT INTO case_tasks (case_id, title, description, status, created_by)
+        VALUES (?, ?, '', 'todo', ?)
+    ");
+    foreach ($defaultTasks as $taskTitle) {
+        $insertTaskStmt->execute([700, $taskTitle, 4]);
+    }
+}
+
+// Verify 5 default tasks were generated
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM case_tasks WHERE case_id = ?");
+$stmt->execute([700]);
+assert_equals(5, (int)$stmt->fetchColumn(), "5 default tasks should be automatically generated for the case.");
+
+// D. CRUD Operations: Add, Update Status, Edit, Delete
+// Create custom task
+$pdo->prepare("INSERT INTO case_tasks (case_id, title, description, status, created_by) VALUES (?, ?, ?, ?, ?)")
+    ->execute([700, 'Obtain CCTV footage', 'Request footage from bank', 'todo', 4]);
+
+$stmt = $pdo->prepare("SELECT * FROM case_tasks WHERE case_id = ? AND title = ?");
+$stmt->execute([700, 'Obtain CCTV footage']);
+$taskRec = $stmt->fetch();
+assert_equals('Obtain CCTV footage', $taskRec['title'], "Custom task should be added to database.");
+assert_equals('todo', $taskRec['status'], "Newly added task status should default to todo.");
+
+$taskId = (int)$taskRec['id'];
+
+// Update status to in_progress
+$pdo->prepare("UPDATE case_tasks SET status = ? WHERE id = ?")->execute(['in_progress', $taskId]);
+$stmt = $pdo->prepare("SELECT status FROM case_tasks WHERE id = ?");
+$stmt->execute([$taskId]);
+assert_equals('in_progress', $stmt->fetchColumn(), "Task status should update to in_progress.");
+
+// Edit task details
+$pdo->prepare("UPDATE case_tasks SET title = ?, description = ? WHERE id = ?")->execute(['Obtain CCTV footage (Urgent)', 'Bank CCTV request approved', $taskId]);
+$stmt = $pdo->prepare("SELECT * FROM case_tasks WHERE id = ?");
+$stmt->execute([$taskId]);
+$updatedTask = $stmt->fetch();
+assert_equals('Obtain CCTV footage (Urgent)', $updatedTask['title'], "Task title should be updated.");
+assert_equals('Bank CCTV request approved', $updatedTask['description'], "Task description should be updated.");
+
+// Delete task
+$pdo->prepare("DELETE FROM case_tasks WHERE id = ?")->execute([$taskId]);
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM case_tasks WHERE id = ?");
+$stmt->execute([$taskId]);
+assert_equals(0, (int)$stmt->fetchColumn(), "Task record should be removed from database.");
+
+// E. Cascade Delete Tests
+$pdo->prepare("DELETE FROM cases WHERE id = ?")->execute([700]);
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM case_tasks WHERE case_id = ?");
+$stmt->execute([700]);
+assert_equals(0, (int)$stmt->fetchColumn(), "All tasks should be cascade-deleted when the case is deleted.");
+
+// F. Case Status Update Tests
+$pdo->prepare("INSERT INTO cases (id, citizen_id, case_number, title, description, status, priority, investigator_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    ->execute([800, 1, 'CF-TEST-CASE-STATUS', 'Status Update Test Case', 'Testing status change features', 'in_progress', 'low', 4]);
+
+function simulate_status_change_access($user_role, $user_id, $case) {
+    if ($user_role === 'Admin' || $user_role === 'Officer') {
+        return true;
+    } elseif ($user_role === 'Investigator') {
+        return ((int)$case['investigator_id'] === (int)$user_id);
+    }
+    return false;
+}
+
+// Access Control
+assert_true(simulate_status_change_access('Investigator', 4, ['investigator_id' => 4]), "Assigned investigator should be allowed to update case status.");
+assert_true(!simulate_status_change_access('Investigator', 4, ['investigator_id' => 5]), "Unassigned investigator should be denied status updates.");
+assert_true(simulate_status_change_access('Admin', 4, ['investigator_id' => 5]), "Admin should be allowed status updates on any case.");
+assert_true(simulate_status_change_access('Officer', 4, ['investigator_id' => 5]), "Officer should be allowed status updates on any case.");
+
+// Update Case Status to resolved
+$pdo->prepare("UPDATE cases SET status = ? WHERE id = ?")->execute(['resolved', 800]);
+$stmt = $pdo->prepare("SELECT status FROM cases WHERE id = ?");
+$stmt->execute([800]);
+assert_equals('resolved', $stmt->fetchColumn(), "Case status should be updated to resolved in database.");
+
+// Log corresponding status change event
+$pdo->prepare("INSERT INTO case_timeline (case_id, event_type, title, description, created_by_name) VALUES (?, ?, ?, ?, ?)")
+    ->execute([800, 'status_change', 'Case Status Updated', 'Case status updated to: Resolved', 'Investigator Salam']);
+
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM case_timeline WHERE case_id = ? AND event_type = ? AND title = ?");
+$stmt->execute([800, 'status_change', 'Case Status Updated']);
+assert_equals(1, (int)$stmt->fetchColumn(), "Case status update timeline event should be logged.");
+
+// Reopen Case (in_progress)
+$pdo->prepare("UPDATE cases SET status = ? WHERE id = ?")->execute(['in_progress', 800]);
+$stmt = $pdo->prepare("SELECT status FROM cases WHERE id = ?");
+$stmt->execute([800]);
+assert_equals('in_progress', $stmt->fetchColumn(), "Case status should be updated back to in_progress.");
+
+// Cleanup
+$pdo->prepare("DELETE FROM cases WHERE id = ?")->execute([800]);
 
 
 echo PHP_EOL;

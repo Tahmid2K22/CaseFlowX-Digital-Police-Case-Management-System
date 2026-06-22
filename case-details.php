@@ -195,6 +195,29 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
         </button>
       <?php endif; ?>
 
+      <?php
+        $canChangeCaseStatus = false;
+        if ($role === 'Admin' || $role === 'Officer' || !empty($_SESSION['officer_id'])) {
+            $canChangeCaseStatus = true;
+        } elseif ($role === 'Investigator' && (int)$case['investigator_id'] === (int)$_SESSION['user_id']) {
+            $canChangeCaseStatus = true;
+        }
+        if ($canChangeCaseStatus && $case['investigator_id'] !== null):
+      ?>
+        <?php if ($case['status'] === 'resolved' || $case['status'] === 'closed'): ?>
+          <button onclick="updateCaseStatus('in_progress', this)" class="bg-blue-50 text-blue-600 hover:bg-blue-100 px-5 py-2 rounded-xl text-sm font-semibold flex items-center gap-1.5 transition">
+            <i class="ti ti-rotate-clockwise"></i> Reopen Case
+          </button>
+        <?php else: ?>
+          <button onclick="updateCaseStatus('resolved', this)" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-sm font-semibold flex items-center gap-1.5 transition shadow">
+            <i class="ti ti-circle-check"></i> Resolve Case
+          </button>
+          <button onclick="updateCaseStatus('closed', this)" class="bg-slate-600 hover:bg-slate-700 text-white px-5 py-2 rounded-xl text-sm font-semibold flex items-center gap-1.5 transition shadow">
+            <i class="ti ti-square-x"></i> Close Case
+          </button>
+        <?php endif; ?>
+      <?php endif; ?>
+
       <?php if ($sessionRole === 'Admin' && ($case['status'] === 'Submitted' || $case['status'] === 'Under Review' || $case['status'] === 'open')): ?>
         <?php
           $stmtFir = $db->prepare("SELECT id FROM fir_records WHERE fir_number = ? LIMIT 1");
@@ -456,6 +479,38 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
         </div>
       </div>
 
+      <!-- Task Board -->
+      <?php
+        $showTaskBoard = false;
+        if ($role !== 'Citizen') {
+            if ($case['investigator_id'] !== null) {
+                $showTaskBoard = true;
+            }
+        }
+        if ($showTaskBoard):
+      ?>
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center justify-between border-b border-gray-100 pb-3 mb-4">
+          <h2 class="text-navy font-bold text-lg flex items-center gap-2">
+            <i class="ti ti-layout-board text-accent"></i> Case Task Board
+          </h2>
+          <?php
+            $isInvestigatorOrOfficer = ($role === 'Admin' || $role === 'Officer' || $role === 'Investigator' || !empty($_SESSION['officer_id']));
+            if ($isInvestigatorOrOfficer):
+          ?>
+            <button onclick="openTaskModal()" class="bg-accent hover:bg-accent-dark text-white px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition shadow-sm">
+              <i class="ti ti-plus text-sm"></i> Add Task
+            </button>
+          <?php endif; ?>
+        </div>
+        
+        <div id="task-board-container" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <p class="text-gray-400 text-sm italic">Loading task board...</p>
+        </div>
+      </div>
+      <?php endif; ?>
+
+
       <!-- Investigation & Progress Timeline -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <h2 class="text-navy font-bold text-lg border-b border-gray-100 pb-3 mb-5 flex items-center justify-between gap-2">
@@ -679,6 +734,49 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
   </div>
 </div>
 
+<!-- Add / Edit Task Modal -->
+<div id="task-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-xl animate-in fade-in duration-200">
+    <div class="bg-navy px-6 py-4 flex items-center justify-between">
+      <h3 class="text-white font-semibold text-lg flex items-center gap-2" id="task-modal-title-text">
+        <i class="ti ti-layout-grid-add"></i> Add New Task
+      </h3>
+      <button onclick="closeTaskModal()" class="text-white/75 hover:text-white transition">
+        <i class="ti ti-x text-lg"></i>
+      </button>
+    </div>
+    <form id="task-form" class="p-6 space-y-4">
+      <input type="hidden" name="case_id" value="<?= (int)$case['id'] ?>">
+      <input type="hidden" name="action" id="task-action" value="add">
+      <input type="hidden" name="task_id" id="task-id" value="">
+      
+      <div>
+        <label for="task_title" class="block text-xs font-semibold text-gray-600 mb-1.5">
+          Task Title <span class="text-red-400">*</span>
+        </label>
+        <input type="text" id="task_title" name="title" required placeholder="e.g. Visit incident spot" class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
+      </div>
+
+      <div>
+        <label for="task_desc" class="block text-xs font-semibold text-gray-600 mb-1.5">
+          Description (Optional)
+        </label>
+        <textarea id="task_desc" name="description" rows="3" placeholder="Describe the steps, locations, or requirements..." class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent resize-y"></textarea>
+      </div>
+
+      <div class="flex justify-end gap-3 pt-2 border-t border-gray-100">
+        <button type="button" onclick="closeTaskModal()" class="px-4 py-2 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">
+          Cancel
+        </button>
+        <button type="submit" id="task-submit-btn" class="bg-accent hover:bg-accent-dark text-white px-5 py-2 rounded-xl text-sm font-semibold transition">
+          Save Task
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
 
 <?php
 function statusBadge(string $status): string {
@@ -736,7 +834,12 @@ function renderTimeline(events) {
   
   container.innerHTML = events.map(e => {
     const config = typeMap[e.event_type] || typeMap['other'];
-    const formattedDate = new Date(e.created_at).toLocaleString('en-US', {
+    // SQLite datetime('now') returns UTC string like YYYY-MM-DD HH:MM:SS.
+    // Convert to ISO 8601 UTC format (T separator + Z specifier) so browser parses it as UTC.
+    const utcDateStr = (e.created_at.includes('T') || e.created_at.includes('Z'))
+      ? e.created_at
+      : e.created_at.replace(' ', 'T') + 'Z';
+    const formattedDate = new Date(utcDateStr).toLocaleString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -945,6 +1048,215 @@ async function deleteEvidence(evidenceId, btn) {
   }
 }
 
+let currentCaseTasks = [];
+
+function openTaskModal(taskId = null) {
+  document.getElementById('task-modal').classList.remove('hidden');
+  const titleInput = document.getElementById('task_title');
+  const descTextarea = document.getElementById('task_desc');
+  const idInput = document.getElementById('task-id');
+  const actionInput = document.getElementById('task-action');
+  const modalTitle = document.getElementById('task-modal-title-text');
+
+  if (taskId) {
+    const t = currentCaseTasks.find(x => parseInt(x.id) === parseInt(taskId));
+    modalTitle.innerHTML = '<i class="ti ti-edit"></i> Edit Task';
+    actionInput.value = 'edit';
+    idInput.value = taskId;
+    titleInput.value = t ? t.title : '';
+    descTextarea.value = t ? (t.description || '') : '';
+  } else {
+    modalTitle.innerHTML = '<i class="ti ti-layout-grid-add"></i> Add New Task';
+    actionInput.value = 'add';
+    idInput.value = '';
+    titleInput.value = '';
+    descTextarea.value = '';
+  }
+}
+
+function closeTaskModal() {
+  document.getElementById('task-modal').classList.add('hidden');
+}
+
+async function updateTaskStatus(taskId, newStatus) {
+  const caseId = <?= $caseId ?>;
+  try {
+    const fd = new FormData();
+    fd.append('case_id', caseId);
+    fd.append('action', 'update_status');
+    fd.append('task_id', taskId);
+    fd.append('status', newStatus);
+
+    const res = await fetch('api/manage_case_tasks.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+      await loadCaseData();
+    } else {
+      alert(data.error || 'Failed to update task status.');
+    }
+  } catch (err) {
+    alert('Network error during task update.');
+  }
+}
+
+async function deleteTask(taskId) {
+  if (!confirm('Are you sure you want to delete this task?')) return;
+  const caseId = <?= $caseId ?>;
+  try {
+    const fd = new FormData();
+    fd.append('case_id', caseId);
+    fd.append('action', 'delete');
+    fd.append('task_id', taskId);
+
+    const res = await fetch('api/manage_case_tasks.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+      await loadCaseData();
+    } else {
+      alert(data.error || 'Failed to delete task.');
+    }
+  } catch (err) {
+    alert('Network error during task deletion.');
+  }
+}
+
+async function updateCaseStatus(newStatus, btn) {
+  const statusLabels = { 'in_progress': 'reopen', 'resolved': 'resolve', 'closed': 'close' };
+  const actionLabel = statusLabels[newStatus] || newStatus;
+  if (!confirm(`Are you sure you want to ${actionLabel} this case?`)) return;
+  
+  btn.disabled = true;
+  const oldText = btn.innerHTML;
+  btn.innerHTML = '<i class="ti ti-loader-2 animate-spin text-sm"></i> Updating…';
+
+  try {
+    const fd = new FormData();
+    fd.append('action', 'update_case_status');
+    fd.append('case_id', <?= $caseId ?>);
+    fd.append('status', newStatus);
+
+    const res = await fetch('api/case.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+      location.reload();
+    } else {
+      alert(data.message || 'Failed to update case status');
+      btn.disabled = false;
+      btn.innerHTML = oldText;
+    }
+  } catch (err) {
+    alert('Network error');
+    btn.disabled = false;
+    btn.innerHTML = oldText;
+  }
+}
+
+
+function renderTaskBoard(tasks, currentUser, caseObj) {
+  const container = document.getElementById('task-board-container');
+  if (!container) return;
+
+  currentCaseTasks = tasks || [];
+
+  const isAllowedToManage = (currentUser.role === 'Admin' || currentUser.role === 'Officer' || currentUser.role === 'FIR Officer' || currentUser.role === 'Supervisor' || (currentUser.role === 'Investigator' && parseInt(caseObj.investigator_id) === parseInt(currentUser.id)));
+
+  if (!tasks || tasks.length === 0) {
+    container.innerHTML = `
+      <div class="col-span-3 text-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+        <i class="ti ti-clipboard-list text-3xl text-slate-300 block mb-2"></i>
+        <p class="text-gray-400 text-sm italic">No tasks on the board yet.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const columns = {
+    'todo': { title: 'To Do', border: 'border-slate-200', bg: 'bg-slate-50/50', badge: 'bg-slate-200 text-slate-700', list: [] },
+    'in_progress': { title: 'In Progress', border: 'border-amber-100', bg: 'bg-amber-50/10', badge: 'bg-amber-100 text-amber-805', list: [] },
+    'done': { title: 'Done', border: 'border-emerald-100', bg: 'bg-emerald-50/10', badge: 'bg-emerald-100 text-emerald-808', list: [] }
+  };
+
+  tasks.forEach(t => {
+    if (columns[t.status]) {
+      columns[t.status].list.push(t);
+    }
+  });
+
+  let html = '';
+  Object.keys(columns).forEach(status => {
+    const col = columns[status];
+    const taskCount = col.list.length;
+    
+    html += `
+      <div class="flex flex-col rounded-2xl border ${col.border} ${col.bg} p-4">
+        <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
+          <span class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+            ${col.title}
+            <span class="px-2 py-0.5 rounded-full text-xs font-bold ${col.badge}">${taskCount}</span>
+          </span>
+        </div>
+        <div class="space-y-3 flex-grow overflow-y-auto max-h-[400px]">
+    `;
+
+    if (taskCount === 0) {
+      html += `
+        <div class="text-center py-8 text-slate-400 text-xs italic">
+          No tasks in this column
+        </div>
+      `;
+    } else {
+      col.list.forEach(t => {
+        let actionButtons = '';
+        if (isAllowedToManage) {
+          let moveLeftBtn = '';
+          let moveRightBtn = '';
+          if (status === 'in_progress') {
+            moveLeftBtn = `<button onclick="updateTaskStatus(${t.id}, 'todo')" class="text-slate-450 hover:text-slate-600 p-1" title="Move to To Do"><i class="ti ti-chevron-left text-sm"></i></button>`;
+            moveRightBtn = `<button onclick="updateTaskStatus(${t.id}, 'done')" class="text-accent hover:text-accent-dark p-1" title="Move to Done"><i class="ti ti-chevron-right text-sm"></i></button>`;
+          } else if (status === 'todo') {
+            moveRightBtn = `<button onclick="updateTaskStatus(${t.id}, 'in_progress')" class="text-amber-500 hover:text-amber-600 p-1" title="Move to In Progress"><i class="ti ti-chevron-right text-sm"></i></button>`;
+          } else if (status === 'done') {
+            moveLeftBtn = `<button onclick="updateTaskStatus(${t.id}, 'in_progress')" class="text-amber-500 hover:text-amber-600 p-1" title="Move to In Progress"><i class="ti ti-chevron-left text-sm"></i></button>`;
+          }
+
+          actionButtons = `
+            <div class="flex items-center justify-between border-t border-slate-100 pt-2.5 mt-2.5">
+              <div class="flex items-center gap-1">
+                ${moveLeftBtn}
+                ${moveRightBtn}
+              </div>
+              <div class="flex items-center gap-1">
+                <button onclick="openTaskModal(${t.id})" class="text-slate-400 hover:text-slate-600 p-1" title="Edit Task"><i class="ti ti-pencil text-xs"></i></button>
+                <button onclick="deleteTask(${t.id})" class="text-rose-450 hover:text-rose-600 p-1" title="Delete Task"><i class="ti ti-trash text-xs"></i></button>
+              </div>
+            </div>
+          `;
+        }
+
+        const descHtml = t.description 
+          ? `<p class="text-xs text-slate-500 mt-1 leading-relaxed whitespace-pre-line">${escapeHTML(t.description)}</p>` 
+          : '';
+
+        html += `
+          <div class="bg-white border border-slate-150 hover:border-slate-200 rounded-xl p-3.5 shadow-sm hover:shadow-md transition">
+            <h4 class="font-bold text-slate-700 text-xs leading-tight">${escapeHTML(t.title)}</h4>
+            ${descHtml}
+            ${actionButtons}
+          </div>
+        `;
+      });
+    }
+
+    html += `
+        </div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+
+
 // Load case details and timeline events from API
 async function loadCaseData() {
   const caseId = <?= $caseId ?>;
@@ -955,6 +1267,7 @@ async function loadCaseData() {
       renderTimeline(data.timeline);
       renderEvidence(data.evidence, data.session_user, data.case);
       renderSuspects(data.suspects, data.session_user, data.case);
+      renderTaskBoard(data.tasks, data.session_user, data.case);
     } else {
       console.error('Failed to load case data:', data.message);
       document.getElementById('timeline-count').textContent = 'Error loading';
@@ -1110,6 +1423,39 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       } catch (err) {
         alert('Network error during suspect profile addition.');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = oldText;
+      }
+    });
+  }
+
+  const taskForm = document.getElementById('task-form');
+  if (taskForm) {
+    taskForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const submitBtn = document.getElementById('task-submit-btn');
+      submitBtn.disabled = true;
+      const oldText = submitBtn.innerHTML;
+      submitBtn.innerHTML = '<i class="ti ti-loader-2 animate-spin text-sm"></i> Saving…';
+
+      try {
+        const fd = new FormData(this);
+        const res = await fetch('api/manage_case_tasks.php', {
+          method: 'POST',
+          body: fd
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          closeTaskModal();
+          taskForm.reset();
+          await loadCaseData();
+        } else {
+          alert(data.error || 'Failed to save task.');
+        }
+      } catch (err) {
+        alert('Network error during task save.');
       } finally {
         submitBtn.disabled = false;
         submitBtn.innerHTML = oldText;
