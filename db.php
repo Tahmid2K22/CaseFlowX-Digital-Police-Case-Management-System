@@ -374,6 +374,38 @@ function init_schema(PDO $pdo): void {
 
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_timeline_case ON case_timeline(case_id)');
 
+    // Suspect Profiles table
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS suspect_profiles (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            case_id               INTEGER NOT NULL,
+            full_name             TEXT    NOT NULL,
+            national_id           TEXT,
+            phone                 TEXT,
+            email                 TEXT,
+            gender                TEXT    CHECK(gender IN ('male', 'female', 'other')),
+            date_of_birth         TEXT,
+            physical_description  TEXT,
+            address               TEXT,
+            status                TEXT    NOT NULL CHECK(status IN ('identified', 'wanted', 'under_arrest', 'released', 'convicted')) DEFAULT 'identified',
+            photo_path            TEXT,
+            created_by            INTEGER NOT NULL,
+            created_at            TEXT    NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
+            FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+        )
+    ");
+
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_suspects_case ON suspect_profiles(case_id)');
+
+    // Ensure photo_path exists on existing installations
+    try {
+        $pdo->exec("ALTER TABLE suspect_profiles ADD COLUMN photo_path TEXT");
+    } catch (PDOException $e) {
+        // Column already exists, ignore
+    }
+
+
     // Backfill from existing cases if timeline table is empty
     try {
         $stmtCount = $pdo->query("SELECT COUNT(*) FROM case_timeline");
