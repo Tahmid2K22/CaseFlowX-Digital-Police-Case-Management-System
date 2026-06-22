@@ -405,6 +405,25 @@ function init_schema(PDO $pdo): void {
         // Column already exists, ignore
     }
 
+    // Case Tasks table
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS case_tasks (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            case_id         INTEGER NOT NULL,
+            title           TEXT    NOT NULL,
+            description     TEXT,
+            status          TEXT    NOT NULL CHECK(status IN ('todo', 'in_progress', 'done')) DEFAULT 'todo',
+            created_by      INTEGER NOT NULL,
+            created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+            updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
+            FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+        )
+    ");
+
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_tasks_case ON case_tasks(case_id)');
+
+
 
     // Backfill from existing cases if timeline table is empty
     try {

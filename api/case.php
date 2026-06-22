@@ -136,6 +136,26 @@ try {
         $stmt->execute([$investigatorName, $investigatorId, $case_id, $currentUserId]);
 
         if ($stmt->rowCount() > 0) {
+            // Populate default tasks if task board is empty for this case
+            $checkStmt = $db->prepare("SELECT COUNT(*) FROM case_tasks WHERE case_id = ?");
+            $checkStmt->execute([$case_id]);
+            if ((int)$checkStmt->fetchColumn() === 0) {
+                $defaultTasks = [
+                    'Review FIR and case details',
+                    'Visit incident scene and gather initial evidence',
+                    'Identify and interview witnesses',
+                    'Identify potential suspects',
+                    'Draft and submit final investigation report'
+                ];
+                $insertTaskStmt = $db->prepare("
+                    INSERT INTO case_tasks (case_id, title, description, status, created_by)
+                    VALUES (?, ?, '', 'todo', ?)
+                ");
+                foreach ($defaultTasks as $taskTitle) {
+                    $insertTaskStmt->execute([$case_id, $taskTitle, $investigatorId ?: $currentUserId]);
+                }
+            }
+
             add_case_timeline_event($db, $case_id, 'investigator_assigned', 'Investigator Assigned', "Investigator assigned: " . $investigatorName, $currentUserName);
             echo json_encode(['success' => true, 'message' => 'Investigating officer assigned successfully.']);
         } else {
@@ -178,6 +198,54 @@ try {
             echo json_encode(['success' => true, 'message' => 'Timeline event added successfully.']);
         } else {
             echo json_encode(['success' => false, 'message' => 'Failed to add timeline event.']);
+        }
+
+    } elseif ($action === 'update_case_status') {
+        $status = trim($_POST['status'] ?? '');
+        if (!in_array($status, ['in_progress', 'resolved', 'closed'], true)) {
+            echo json_encode(['success' => false, 'message' => 'Invalid status option selected.']);
+            exit;
+        }
+
+        // Fetch case to check permissions
+        $stmtCase = $db->prepare("SELECT investigator_id, officer_id, status FROM cases WHERE id = ?");
+        $stmtCase->execute([$case_id]);
+        $case = $stmtCase->fetch();
+
+        if (!$case) {
+            echo json_encode(['success' => false, 'message' => 'Case not found.']);
+            exit;
+        }
+
+        // Access control check: Admins, Officers, and Assigned Investigators only
+        $allowed = false;
+        if ($currentUserRole === 'Admin' || $currentUserRole === 'Officer' || $currentUserRole === 'FIR Officer' || $currentUserRole === 'Supervisor') {
+            $allowed = true;
+        } elseif ($currentUserRole === 'Investigator') {
+            if ((int)$case['investigator_id'] === (int)$currentUserId) {
+                $allowed = true;
+            }
+        }
+
+        if (!$allowed) {
+            echo json_encode(['success' => false, 'message' => 'Access denied. Only the assigned investigator or managing officers can change case status.']);
+            exit;
+        }
+
+        $stmt = $db->prepare("
+            UPDATE cases 
+            SET status = ?, modified_by = ?, modified_at = datetime('now')
+            WHERE id = ?
+        ");
+        $stmt->execute([$status, $currentUserId, $case_id]);
+
+        if ($stmt->rowCount() > 0) {
+            // Log timeline event
+            $statusText = $status === 'in_progress' ? 'In Progress' : ($status === 'resolved' ? 'Resolved' : 'Closed');
+            add_case_timeline_event($db, $case_id, 'status_change', 'Case Status Updated', "Case status updated to: {$statusText}", $currentUserName);
+            echo json_encode(['success' => true, 'message' => "Case status updated to {$statusText} successfully."]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Failed to update case status.']);
         }
 
     } else {
