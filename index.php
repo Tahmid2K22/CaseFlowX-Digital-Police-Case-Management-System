@@ -19,7 +19,7 @@
             <a href="officer-login.php" class="block w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition">
                 Officer Portal
             </a>
-            <p class="text-sm text-gray-400">Citizen portal coming soon</p>
+        
         </div>
     </div>
 </body>

@@ -52,7 +52,7 @@ function init_schema(PDO $pdo): void {
             case_number     TEXT    NOT NULL UNIQUE,
             title           TEXT    NOT NULL,
             description     TEXT    NOT NULL,
-            status          TEXT    NOT NULL DEFAULT 'Submitted' CHECK(status IN ('Submitted','Under Review','Registered','Rejected')),
+            status          TEXT    NOT NULL DEFAULT 'Open' CHECK(status IN ('Open','Closed','Pending','open','in_progress','resolved','closed','Submitted','Under Review','Registered','Rejected')),
             priority        TEXT    NOT NULL DEFAULT 'medium' CHECK(priority IN ('low','medium','high')),
             created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
             fir_number      TEXT,
@@ -110,6 +110,75 @@ function init_schema(PDO $pdo): void {
         error_log("Cases table migration failed: " . $e->getMessage());
     }
 
+    // Dynamic migration: Ensure cases status CHECK constraint supports 'Open', 'Closed', 'Pending'
+    try {
+        $stmt = $pdo->query("SELECT sql FROM sqlite_master WHERE type='table' AND name='cases'");
+        $row = $stmt->fetch();
+        if ($stmt) {
+            $stmt->closeCursor();
+        }
+        if ($row && strpos($row['sql'], "'Pending'") === false) {
+            $pdo->exec("PRAGMA foreign_keys = OFF;");
+            $pdo->exec("ALTER TABLE cases RENAME TO cases_old;");
+            $pdo->exec("
+                CREATE TABLE cases (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    citizen_id      INTEGER,
+                    case_number     TEXT    NOT NULL UNIQUE,
+                    title           TEXT    NOT NULL,
+                    description     TEXT    NOT NULL,
+                    status          TEXT    NOT NULL DEFAULT 'Open' CHECK(status IN ('Open','Closed','Pending','open','in_progress','resolved','closed','Submitted','Under Review','Registered','Rejected')),
+                    priority        TEXT    NOT NULL DEFAULT 'medium' CHECK(priority IN ('low','medium','high')),
+                    created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+                    fir_number      TEXT,
+                    complainant_name TEXT,
+                    complainant_nid  TEXT,
+                    complainant_phone TEXT,
+                    complainant_address TEXT,
+                    incident_date    TEXT,
+                    incident_time    TEXT,
+                    incident_location TEXT,
+                    incident_description TEXT,
+                    sections_applied TEXT,
+                    witness_details  TEXT,
+                    officer_id       INTEGER,
+                    station_code     TEXT,
+                    investigating_officer TEXT,
+                    modified_by      INTEGER,
+                    modified_at      TEXT,
+                    FOREIGN KEY (citizen_id) REFERENCES citizens(id) ON DELETE CASCADE,
+                    FOREIGN KEY (officer_id) REFERENCES officers(id) ON DELETE SET NULL
+                )
+            ");
+            $pdo->exec("
+                INSERT INTO cases (
+                    id, citizen_id, case_number, title, description, status, priority, created_at,
+                    fir_number, complainant_name, complainant_nid, complainant_phone, complainant_address,
+                    incident_date, incident_time, incident_location, incident_description, sections_applied,
+                    witness_details, officer_id, station_code, investigating_officer, modified_by, modified_at
+                )
+                SELECT 
+                    id, citizen_id, case_number, title, description, 
+                    CASE 
+                        WHEN status = 'open' THEN 'Open'
+                        WHEN status = 'closed' THEN 'Closed'
+                        WHEN status = 'in_progress' THEN 'Pending'
+                        WHEN status = 'Submitted' THEN 'Open'
+                        ELSE status
+                    END,
+                    priority, created_at,
+                    fir_number, complainant_name, complainant_nid, complainant_phone, complainant_address,
+                    incident_date, incident_time, incident_location, incident_description, sections_applied,
+                    witness_details, officer_id, station_code, investigating_officer, modified_by, modified_at
+                FROM cases_old
+            ");
+            $pdo->exec("DROP TABLE cases_old;");
+            $pdo->exec("PRAGMA foreign_keys = ON;");
+        }
+    } catch (PDOException $e) {
+        error_log("Cases check constraint migration failed: " . $e->getMessage());
+    }
+
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_cases_citizen ON cases(citizen_id)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_cases_officer ON cases(officer_id)');
@@ -149,7 +218,7 @@ function init_schema(PDO $pdo): void {
             witness_details         TEXT,
             officer_id              INTEGER,
             station_code            TEXT    NOT NULL,
-            status                  TEXT    NOT NULL DEFAULT 'Draft' CHECK(status IN ('Draft','Submitted','Under Review','Registered','Rejected')),
+            status                  TEXT    NOT NULL DEFAULT 'Open' CHECK(status IN ('Open','Closed','Pending','Draft','Submitted','Under Review','Registered','Rejected','open','in_progress','resolved','closed')),
             priority                TEXT    NOT NULL DEFAULT 'medium' CHECK(priority IN ('low','medium','high')),
             created_by              INTEGER,
             created_at              TEXT    NOT NULL DEFAULT (datetime('now')),
@@ -159,6 +228,71 @@ function init_schema(PDO $pdo): void {
             FOREIGN KEY (created_by) REFERENCES officers(id) ON DELETE SET NULL
         )
     ");
+
+    // Dynamic migration: Ensure fir_records status CHECK constraint supports 'Open', 'Closed', 'Pending'
+    try {
+        $stmtFir = $pdo->query("SELECT sql FROM sqlite_master WHERE type='table' AND name='fir_records'");
+        $rowFir = $stmtFir->fetch();
+        if ($stmtFir) {
+            $stmtFir->closeCursor();
+        }
+        if ($rowFir && strpos($rowFir['sql'], "'Pending'") === false) {
+            $pdo->exec("PRAGMA foreign_keys = OFF;");
+            $pdo->exec("ALTER TABLE fir_records RENAME TO fir_records_old;");
+            $pdo->exec("
+                CREATE TABLE fir_records (
+                    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+                    fir_number              TEXT    NOT NULL UNIQUE,
+                    complainant_name        TEXT    NOT NULL,
+                    complainant_nid         TEXT    NOT NULL,
+                    complainant_phone       TEXT,
+                    complainant_address     TEXT,
+                    incident_date           TEXT    NOT NULL,
+                    incident_time           TEXT,
+                    incident_location       TEXT    NOT NULL,
+                    incident_description    TEXT    NOT NULL,
+                    sections_applied        TEXT,
+                    witness_details         TEXT,
+                    officer_id              INTEGER,
+                    station_code            TEXT    NOT NULL,
+                    status                  TEXT    NOT NULL DEFAULT 'Open' CHECK(status IN ('Open','Closed','Pending','Draft','Submitted','Under Review','Registered','Rejected','open','in_progress','resolved','closed')),
+                    priority                TEXT    NOT NULL DEFAULT 'medium' CHECK(priority IN ('low','medium','high')),
+                    created_by              INTEGER,
+                    created_at              TEXT    NOT NULL DEFAULT (datetime('now')),
+                    modified_by             INTEGER,
+                    modified_at             TEXT,
+                    FOREIGN KEY (officer_id) REFERENCES officers(id) ON DELETE SET NULL,
+                    FOREIGN KEY (created_by) REFERENCES officers(id) ON DELETE SET NULL
+                )
+            ");
+            $pdo->exec("
+                INSERT INTO fir_records (
+                    id, fir_number, complainant_name, complainant_nid, complainant_phone, complainant_address,
+                    incident_date, incident_time, incident_location, incident_description, sections_applied,
+                    witness_details, officer_id, station_code, status, priority, created_by, created_at,
+                    modified_by, modified_at
+                )
+                SELECT 
+                    id, fir_number, complainant_name, complainant_nid, complainant_phone, complainant_address,
+                    incident_date, incident_time, incident_location, incident_description, sections_applied,
+                    witness_details, officer_id, station_code,
+                    CASE 
+                        WHEN status = 'Draft' THEN 'Draft'
+                        WHEN status = 'Submitted' THEN 'Open'
+                        WHEN status = 'open' THEN 'Open'
+                        WHEN status = 'closed' THEN 'Closed'
+                        ELSE status
+                    END,
+                    priority, created_by, created_at,
+                    modified_by, modified_at
+                FROM fir_records_old
+            ");
+            $pdo->exec("DROP TABLE fir_records_old;");
+            $pdo->exec("PRAGMA foreign_keys = ON;");
+        }
+    } catch (PDOException $e) {
+        error_log("Fir_records check constraint migration failed: " . $e->getMessage());
+    }
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS fir_evidence (
@@ -175,18 +309,44 @@ function init_schema(PDO $pdo): void {
         )
     ");
 
-    // Dynamic migration: Ensure case_id column exists in fir_evidence table
+    // Dynamic migration: Ensure fir_evidence table matches the updated schema (uses case_id, drops fir_id or makes it nullable)
     try {
-        $existingEvCols = [];
-        $stmt = $pdo->query("PRAGMA table_info(fir_evidence)");
-        while ($row = $stmt->fetch()) {
-            $existingEvCols[] = $row['name'];
+        $stmtEvCheck = $pdo->query("SELECT sql FROM sqlite_master WHERE type='table' AND name='fir_evidence'");
+        $rowEvCheck = $stmtEvCheck->fetch();
+        if ($stmtEvCheck) {
+            $stmtEvCheck->closeCursor();
         }
-        if (!in_array('case_id', $existingEvCols, true)) {
-            $pdo->exec("ALTER TABLE fir_evidence ADD COLUMN case_id INTEGER");
+        if ($rowEvCheck && strpos($rowEvCheck['sql'], 'fir_id') !== false) {
+            $pdo->exec("PRAGMA foreign_keys = OFF;");
+            $pdo->exec("ALTER TABLE fir_evidence RENAME TO fir_evidence_old;");
+            $pdo->exec("
+                CREATE TABLE fir_evidence (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    case_id         INTEGER NOT NULL,
+                    file_name       TEXT    NOT NULL,
+                    file_path       TEXT    NOT NULL,
+                    file_type       TEXT    NOT NULL,
+                    file_size       INTEGER NOT NULL,
+                    uploaded_by     INTEGER NOT NULL,
+                    uploaded_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+                    FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
+                    FOREIGN KEY (uploaded_by) REFERENCES officers(id) ON DELETE RESTRICT
+                )
+            ");
+            $pdo->exec("
+                INSERT INTO fir_evidence (id, case_id, file_name, file_path, file_type, file_size, uploaded_by, uploaded_at)
+                SELECT 
+                    id, 
+                    COALESCE(case_id, (SELECT c.id FROM cases c JOIN fir_records f ON c.fir_number = f.fir_number WHERE f.id = fir_evidence_old.fir_id LIMIT 1)),
+                    file_name, file_path, file_type, file_size, uploaded_by, uploaded_at
+                FROM fir_evidence_old
+                WHERE COALESCE(case_id, (SELECT c.id FROM cases c JOIN fir_records f ON c.fir_number = f.fir_number WHERE f.id = fir_evidence_old.fir_id LIMIT 1)) IS NOT NULL
+            ");
+            $pdo->exec("DROP TABLE fir_evidence_old;");
+            $pdo->exec("PRAGMA foreign_keys = ON;");
         }
     } catch (PDOException $e) {
-        error_log("Evidence table migration failed: " . $e->getMessage());
+        error_log("Evidence table schema migration failed: " . $e->getMessage());
     }
 
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_evidence_case ON fir_evidence(case_id)');

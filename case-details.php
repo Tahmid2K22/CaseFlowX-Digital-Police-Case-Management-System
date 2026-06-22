@@ -145,7 +145,7 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
 
     <!-- Quick Action buttons -->
     <div class="flex items-center gap-3">
-      <?php if ($isUnassigned && ($case['status'] === 'Submitted' || $case['status'] === 'open')): ?>
+      <?php if ($isUnassigned && ($case['status'] === 'Submitted' || $case['status'] === 'open' || $case['status'] === 'Open')): ?>
         <button onclick="acceptCase(<?= (int)$case['id'] ?>, this)" class="bg-accent hover:bg-accent-dark text-white px-5 py-2 rounded-xl text-sm font-semibold flex items-center gap-1.5 transition shadow">
           <i class="ti ti-check"></i> Accept Case
         </button>
@@ -153,6 +153,19 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
           <i class="ti ti-x"></i> Reject Case
         </button>
       <?php elseif ($isAssignedToMe): ?>
+        <!-- Status Update Dropdown -->
+        <div class="relative inline-block text-left">
+          <select onchange="updateCaseStatus(<?= (int)$case['id'] ?>, this.value)" class="bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent appearance-none pr-8">
+            <option value="">-- Update Status --</option>
+            <option value="Open" <?= $case['status'] === 'Open' || $case['status'] === 'open' ? 'selected' : '' ?>>Open</option>
+            <option value="Pending" <?= $case['status'] === 'Pending' || $case['status'] === 'in_progress' ? 'selected' : '' ?>>Pending</option>
+            <option value="Closed" <?= $case['status'] === 'Closed' || $case['status'] === 'closed' ? 'selected' : '' ?>>Closed</option>
+          </select>
+          <span class="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400">
+            <i class="ti ti-chevron-down text-sm"></i>
+          </span>
+        </div>
+
         <button onclick="openAssignModal(<?= (int)$case['id'] ?>, '<?= htmlspecialchars($case['investigating_officer'] ?? '') ?>')" class="bg-accent hover:bg-accent-dark text-white px-5 py-2 rounded-xl text-sm font-semibold flex items-center gap-1.5 transition shadow">
           <i class="ti ti-user-shield"></i> Assign / Update Investigator
         </button>
@@ -247,7 +260,7 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
           <i class="ti ti-paperclip text-accent"></i> Case Evidence & Attachments
         </h2>
         <?php if (count($evidenceList) > 0): ?>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <?php foreach ($evidenceList as $ev): 
               $isImg = preg_match('/^image\//', $ev['file_type']);
               $isPdf = ($ev['file_type'] === 'application/pdf');
@@ -276,7 +289,26 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
             <?php endforeach; ?>
           </div>
         <?php else: ?>
-          <p class="text-gray-400 text-sm italic">No evidence files uploaded for this complaint.</p>
+          <p class="text-gray-400 text-sm italic mb-4">No evidence files uploaded for this complaint.</p>
+        <?php endif; ?>
+
+        <!-- Add Attachment Form for Handling Officer -->
+        <?php if ($isAssignedToMe): ?>
+          <div class="mt-6 pt-6 border-t border-gray-100">
+            <h3 class="text-navy font-semibold text-sm mb-3">Attach Photos / Documents</h3>
+            <div id="detail-upload-zone" class="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center cursor-pointer hover:border-accent hover:bg-accent/5 transition duration-200">
+              <input type="file" id="detail-file-input" accept=".pdf,.jpg,.jpeg,.png,.mp4" class="hidden" onchange="uploadDetailEvidence(<?= (int)$case['id'] ?>, event)">
+              <div class="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-2">
+                <i class="ti ti-cloud-upload text-accent text-lg"></i>
+              </div>
+              <p class="text-xs font-semibold text-gray-700 mb-0.5">Click to upload photo or document</p>
+              <p class="text-[10px] text-gray-400">PDF, JPG, PNG, or MP4 — Max 10MB</p>
+            </div>
+            <div id="detail-upload-loading" class="hidden mt-3 text-center text-xs text-gray-500">
+              <i class="ti ti-loader-2 animate-spin text-accent text-base"></i> Uploading attachment...
+            </div>
+            <div id="detail-upload-error" class="hidden mt-2 p-2 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg text-center"></div>
+          </div>
         <?php endif; ?>
       </div>
 
@@ -390,9 +422,14 @@ function statusBadge(string $status): string {
     $map = [
         'Submitted'     => ['bg-blue-50 text-blue-700 border-blue-200', 'ti-send', 'Submitted'],
         'open'          => ['bg-blue-50 text-blue-700 border-blue-200', 'ti-send', 'Submitted'],
+        'Open'          => ['bg-blue-50 text-blue-700 border-blue-200', 'ti-send', 'Open'],
+        'Closed'        => ['bg-red-50 text-red-700 border-red-200', 'ti-x', 'Closed'],
+        'Pending'       => ['bg-orange-50 text-orange-700 border-orange-200', 'ti-clock', 'Pending'],
         'Under Review'  => ['bg-orange-50 text-orange-700 border-orange-200', 'ti-eye', 'Under Review'],
         'Registered'    => ['bg-green-50 text-green-700 border-green-200', 'ti-circle-check', 'Registered'],
         'Rejected'      => ['bg-red-50 text-red-700 border-red-200', 'ti-x', 'Rejected'],
+        'in_progress'   => ['bg-orange-50 text-orange-700 border-orange-200', 'ti-clock', 'Pending'],
+        'closed'        => ['bg-red-50 text-red-700 border-red-200', 'ti-x', 'Closed'],
     ];
     [$cls, $ico, $lbl] = $map[$status] ?? [$map['Submitted'][0], $map['Submitted'][1], $status];
     return "<span class=\"inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border {$cls}\"><i class=\"ti {$ico}\"></i> {$lbl}</span>";
@@ -540,6 +577,64 @@ document.getElementById('assign-form').addEventListener('submit', async function
     submitBtn.innerHTML = oldText;
   }
 });
+
+async function updateCaseStatus(caseId, status) {
+  if (!status) return;
+  try {
+    const fd = new FormData();
+    fd.append('action', 'update_status');
+    fd.append('case_id', caseId);
+    fd.append('status', status);
+    const res = await fetch('api/case.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+      location.reload();
+    } else {
+      alert(data.message || 'Failed to update status');
+    }
+  } catch (e) {
+    alert('Network error');
+  }
+}
+
+document.getElementById('detail-upload-zone')?.addEventListener('click', () => {
+  document.getElementById('detail-file-input').click();
+});
+
+async function uploadDetailEvidence(caseId, event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const loading = document.getElementById('detail-upload-loading');
+  const errorDiv = document.getElementById('detail-upload-error');
+  loading.classList.remove('hidden');
+  errorDiv.classList.add('hidden');
+  
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('case_id', caseId);
+  
+  try {
+    const res = await fetch('api/attach_evidence.php', {
+      method: 'POST',
+      body: fd
+    });
+    const data = await res.json();
+    if (data.success) {
+      location.reload();
+    } else {
+      errorDiv.textContent = data.error || 'Failed to upload attachment';
+      errorDiv.classList.remove('hidden');
+      loading.classList.add('hidden');
+    }
+  } catch (e) {
+    errorDiv.textContent = 'Network error during file upload';
+    errorDiv.classList.remove('hidden');
+    loading.classList.add('hidden');
+  } finally {
+    event.target.value = ''; // Reset file input
+  }
+}
 </script>
 </body>
 </html>

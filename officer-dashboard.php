@@ -15,9 +15,9 @@ $underReviewCount = 0;
 $registeredCount = 0;
 try {
     $totalAssigned = (int) $db->query("SELECT COUNT(*) FROM cases WHERE officer_id IS NOT NULL")->fetchColumn();
-    $unassignedCount = (int) $db->query("SELECT COUNT(*) FROM cases WHERE officer_id IS NULL AND (status = 'Submitted' OR status = 'open')")->fetchColumn();
-    $underReviewCount = (int) $db->query("SELECT COUNT(*) FROM cases WHERE (status = 'Under Review' OR status = 'in_progress')")->fetchColumn();
-    $registeredCount = (int) $db->query("SELECT COUNT(*) FROM cases WHERE (status = 'Registered' OR status = 'resolved')")->fetchColumn();
+    $unassignedCount = (int) $db->query("SELECT COUNT(*) FROM cases WHERE officer_id IS NULL AND (status IN ('Submitted','open','Open','Pending'))")->fetchColumn();
+    $underReviewCount = (int) $db->query("SELECT COUNT(*) FROM cases WHERE (status IN ('Under Review','in_progress','Pending'))")->fetchColumn();
+    $registeredCount = (int) $db->query("SELECT COUNT(*) FROM cases WHERE (status IN ('Registered','resolved','Closed','closed'))")->fetchColumn();
 } catch (PDOException $e) {
     error_log("Dashboard stats error: " . $e->getMessage());
 }
@@ -45,7 +45,7 @@ try {
         SELECT c.*, ct.full_name as citizen_name
         FROM cases c
         LEFT JOIN citizens ct ON c.citizen_id = ct.id
-        WHERE c.officer_id IS NULL AND (c.status = 'Submitted' OR c.status = 'open')
+        WHERE c.officer_id IS NULL AND (c.status IN ('Submitted','open','Open'))
         ORDER BY c.created_at DESC
     ");
     $unassignedCases = $stmt->fetchAll();
@@ -344,9 +344,14 @@ function statusBadge(string $status): string {
     $map = [
         'Submitted'     => ['bg-blue-50 text-blue-700 border-blue-200', 'ti-send', 'Submitted'],
         'open'          => ['bg-blue-50 text-blue-700 border-blue-200', 'ti-send', 'Submitted'],
+        'Open'          => ['bg-blue-50 text-blue-700 border-blue-200', 'ti-send', 'Open'],
+        'Closed'        => ['bg-red-50 text-red-700 border-red-200', 'ti-x', 'Closed'],
+        'Pending'       => ['bg-orange-50 text-orange-700 border-orange-200', 'ti-clock', 'Pending'],
         'Under Review'  => ['bg-orange-50 text-orange-700 border-orange-200', 'ti-eye', 'Under Review'],
         'Registered'    => ['bg-green-50 text-green-700 border-green-200', 'ti-circle-check', 'Registered'],
         'Rejected'      => ['bg-red-50 text-red-700 border-red-200', 'ti-x', 'Rejected'],
+        'in_progress'   => ['bg-orange-50 text-orange-700 border-orange-200', 'ti-clock', 'Pending'],
+        'closed'        => ['bg-red-50 text-red-700 border-red-200', 'ti-x', 'Closed'],
     ];
     [$cls, $ico, $lbl] = $map[$status] ?? [$map['Submitted'][0], $map['Submitted'][1], $status];
     return "<span class=\"inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border {$cls}\"><i class=\"ti {$ico}\"></i> {$lbl}</span>";

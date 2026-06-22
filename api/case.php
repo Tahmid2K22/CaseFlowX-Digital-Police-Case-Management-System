@@ -74,6 +74,38 @@ try {
         } else {
             echo json_encode(['success' => false, 'message' => 'Failed to assign investigator. Ensure the case is accepted by you.']);
         }
+    } elseif ($action === 'update_status') {
+        $status = trim($_POST['status'] ?? '');
+        if (!in_array($status, ['Open', 'Closed', 'Pending'], true)) {
+            echo json_encode(['success' => false, 'message' => 'Invalid status value. Allowed: Open, Closed, Pending.']);
+            exit;
+        }
+
+        // Update cases status
+        $stmt = $db->prepare("
+            UPDATE cases 
+            SET status = ?, modified_by = ?, modified_at = datetime('now')
+            WHERE id = ? AND officer_id = ?
+        ");
+        $stmt->execute([$status, $officer['id'], $case_id, $officer['id']]);
+
+        if ($stmt->rowCount() > 0) {
+            // Also sync with fir_records if this case was filed as an FIR
+            $stmtCase = $db->prepare("SELECT fir_number FROM cases WHERE id = ?");
+            $stmtCase->execute([$case_id]);
+            $caseObj = $stmtCase->fetch();
+            if ($caseObj && !empty($caseObj['fir_number'])) {
+                $stmtFir = $db->prepare("
+                    UPDATE fir_records 
+                    SET status = ?, modified_by = ?, modified_at = datetime('now')
+                    WHERE fir_number = ?
+                ");
+                $stmtFir->execute([$status, $officer['id'], $caseObj['fir_number']]);
+            }
+            echo json_encode(['success' => true, 'message' => 'Status updated successfully.']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Failed to update status. Ensure the case is accepted by you.']);
+        }
     } else {
         echo json_encode(['success' => false, 'message' => 'Invalid action']);
     }
