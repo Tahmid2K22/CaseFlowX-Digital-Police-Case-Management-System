@@ -96,6 +96,11 @@ try {
     $evStmt->execute([$case_id]);
     $evidence = $evStmt->fetchAll();
 
+    // Fetch suspect profiles
+    $suspStmt = $db->prepare("SELECT * FROM suspect_profiles WHERE case_id = ? ORDER BY id ASC");
+    $suspStmt->execute([$case_id]);
+    $suspects = $suspStmt->fetchAll();
+
     // Fetch timeline events ordered chronologically
     $tlStmt = $db->prepare("
         SELECT * FROM case_timeline 
@@ -110,6 +115,7 @@ try {
         'case' => $case,
         'evidence' => $evidence,
         'timeline' => $timeline,
+        'suspects' => $suspects,
         'session_user' => [
             'role' => $role,
             'id' => !empty($role) && $role !== 'Citizen' ? $userId : ($officerId ?: $citizenId),

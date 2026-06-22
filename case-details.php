@@ -214,10 +214,7 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
     </div>
   </div>
 
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-    <!-- Left / Center 2 Columns: Main details -->
-    <div class="md:col-span-2 space-y-6">
+  <div class="max-w-4xl mx-auto space-y-6">
 
       <!-- Case Overview -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
@@ -293,6 +290,52 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
             <p class="text-gray-700 mt-1 whitespace-pre-line"><?= htmlspecialchars($case['witness_details']) ?></p>
           </div>
         <?php endif; ?>
+      </div>
+
+      <!-- Investigation Info -->
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <h2 class="text-navy font-bold text-lg border-b border-gray-100 pb-3 mb-4 flex items-center gap-2">
+          <i class="ti ti-user-shield text-accent"></i> Investigation Info
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+          <div>
+            <span class="text-xs text-gray-400 font-semibold block">Handling Officer</span>
+            <?php if ($case['officer_id'] !== null): ?>
+              <div class="font-semibold text-gray-800 mt-0.5">
+                <?= htmlspecialchars($case['officer_name'] ?? 'Officer #' . $case['officer_id']) ?>
+                <?php if ($isAssignedToMe): ?>
+                  <span class="text-xs font-semibold text-accent">(Me)</span>
+                <?php endif; ?>
+              </div>
+            <?php else: ?>
+              <span class="text-orange-600 font-semibold block mt-0.5">Awaiting Acceptance</span>
+            <?php endif; ?>
+          </div>
+
+          <div>
+            <span class="text-xs text-gray-400 font-semibold block">Investigating Officer</span>
+            <?php if (!empty($case['investigating_officer'])): ?>
+              <div class="font-semibold text-gray-800 flex items-center gap-1 mt-0.5">
+                <i class="ti ti-user-shield text-accent"></i>
+                <?= htmlspecialchars($case['investigating_officer']) ?>
+              </div>
+            <?php else: ?>
+              <span class="text-gray-400 italic block mt-0.5">Not Assigned</span>
+            <?php endif; ?>
+          </div>
+
+          <div>
+            <span class="text-xs text-gray-400 font-semibold block">Filing Station Code</span>
+            <span class="font-semibold text-gray-800 mt-0.5 block"><?= htmlspecialchars($case['station_code'] ?? 'HQ01') ?></span>
+          </div>
+
+          <?php if (!empty($case['modified_at'])): ?>
+            <div class="sm:col-span-3 border-t border-gray-100 pt-3">
+              <span class="text-xs text-gray-400 block">Last Modified</span>
+              <span class="text-gray-500 font-medium text-xs block mt-0.5"><?= date('M d, Y H:i', strtotime($case['modified_at'])) ?></span>
+            </div>
+          <?php endif; ?>
+        </div>
       </div>
 
       <!-- Evidence / Attachments -->
@@ -385,6 +428,34 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
         <?php endif; ?>
       </div>
 
+      <!-- Suspect Profiles -->
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center justify-between border-b border-gray-100 pb-3 mb-4">
+          <h2 class="text-navy font-bold text-lg flex items-center gap-2">
+            <i class="ti ti-users text-accent"></i> Suspect Profiles
+          </h2>
+          <?php
+            $canAddSuspect = false;
+            if ($role === 'Admin' || $role === 'Officer') {
+                $canAddSuspect = true;
+            } elseif ($role === 'Investigator' && (int)$case['investigator_id'] === (int)$_SESSION['user_id']) {
+                $canAddSuspect = true;
+            } elseif (!empty($_SESSION['officer_id'])) {
+                $canAddSuspect = true;
+            }
+            if ($canAddSuspect):
+          ?>
+            <button onclick="openSuspectModal()" class="bg-accent hover:bg-accent-dark text-white px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition shadow-sm">
+              <i class="ti ti-plus text-sm"></i> Add Suspect
+            </button>
+          <?php endif; ?>
+        </div>
+        
+        <div id="suspects-list-container">
+          <p class="text-gray-400 text-sm italic">Loading suspect profiles...</p>
+        </div>
+      </div>
+
       <!-- Investigation & Progress Timeline -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <h2 class="text-navy font-bold text-lg border-b border-gray-100 pb-3 mb-5 flex items-center justify-between gap-2">
@@ -446,59 +517,6 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
         <?php endif; ?>
       </div>
 
-    </div>
-
-    <!-- Right 1 Column: Assignment & Info -->
-    <div class="space-y-6">
-
-      <!-- Case Assignment details -->
-      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <h3 class="text-navy font-bold text-md border-b border-gray-100 pb-3 mb-4 flex items-center gap-1.5">
-          <i class="ti ti-user-shield text-accent"></i> Investigation Info
-        </h3>
-        <div class="space-y-4 text-sm">
-          <div>
-            <span class="text-xs text-gray-400 font-semibold block">Handling Officer</span>
-            <?php if ($case['officer_id'] !== null): ?>
-              <div class="font-semibold text-gray-800 mt-0.5">
-                <?= htmlspecialchars($case['officer_name'] ?? 'Officer #' . $case['officer_id']) ?>
-                <?php if ($isAssignedToMe): ?>
-                  <span class="text-xs font-semibold text-accent">(Me)</span>
-                <?php endif; ?>
-              </div>
-            <?php else: ?>
-              <span class="text-orange-600 font-semibold block mt-0.5">Awaiting Acceptance</span>
-            <?php endif; ?>
-          </div>
-
-          <div>
-            <span class="text-xs text-gray-400 font-semibold block">Investigating Officer</span>
-            <?php if (!empty($case['investigating_officer'])): ?>
-              <div class="font-semibold text-gray-800 flex items-center gap-1 mt-0.5">
-                <i class="ti ti-user-shield text-accent"></i>
-                <?= htmlspecialchars($case['investigating_officer']) ?>
-              </div>
-            <?php else: ?>
-              <span class="text-gray-400 italic block mt-0.5">Not Assigned</span>
-            <?php endif; ?>
-          </div>
-
-          <div>
-            <span class="text-xs text-gray-400 font-semibold block">Filing Station Code</span>
-            <span class="font-semibold text-gray-800 mt-0.5 block"><?= htmlspecialchars($case['station_code'] ?? 'HQ01') ?></span>
-          </div>
-
-          <?php if (!empty($case['modified_at'])): ?>
-            <div class="border-t border-gray-100 pt-3">
-              <span class="text-xs text-gray-400 block">Last Modified</span>
-              <span class="text-gray-500 font-medium text-xs block mt-0.5"><?= date('M d, Y H:i', strtotime($case['modified_at'])) ?></span>
-            </div>
-          <?php endif; ?>
-        </div>
-      </div>
-
-    </div>
-
   </div>
 
 </main>
@@ -550,6 +568,117 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
     </form>
   </div>
 </div>
+
+<!-- Add Suspect Modal -->
+<div id="suspect-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+  <div class="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-xl animate-in fade-in duration-200 my-8">
+    <div class="bg-navy px-6 py-4 flex items-center justify-between">
+      <h3 class="text-white font-semibold text-lg flex items-center gap-2">
+        <i class="ti ti-user-plus"></i> Add Suspect Profile
+      </h3>
+      <button onclick="closeSuspectModal()" class="text-white/75 hover:text-white transition">
+        <i class="ti ti-x text-lg"></i>
+      </button>
+    </div>
+    <form id="suspect-form" enctype="multipart/form-data" class="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+      <input type="hidden" name="case_id" value="<?= $caseId ?>">
+      
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label for="suspect_full_name" class="block text-xs font-semibold text-gray-600 mb-1.5">
+            Full Name <span class="text-red-400">*</span>
+          </label>
+          <input type="text" id="suspect_full_name" name="full_name" required placeholder="Enter full name" class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
+        </div>
+        <div>
+          <label for="suspect_status" class="block text-xs font-semibold text-gray-600 mb-1.5">
+            Status <span class="text-red-400">*</span>
+          </label>
+          <select id="suspect_status" name="status" required class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent bg-white">
+            <option value="identified">Identified</option>
+            <option value="wanted">Wanted</option>
+            <option value="under_arrest">Under Arrest</option>
+            <option value="released">Released</option>
+            <option value="convicted">Convicted</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label for="suspect_gender" class="block text-xs font-semibold text-gray-600 mb-1.5">
+            Gender
+          </label>
+          <select id="suspect_gender" name="gender" class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent bg-white">
+            <option value="">-- Select Gender --</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label for="suspect_dob" class="block text-xs font-semibold text-gray-600 mb-1.5">
+            Date of Birth
+          </label>
+          <input type="date" id="suspect_dob" name="date_of_birth" class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label for="suspect_nid" class="block text-xs font-semibold text-gray-600 mb-1.5">
+            National ID (NID)
+          </label>
+          <input type="text" id="suspect_nid" name="national_id" placeholder="Enter NID (10-17 digits)" class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
+        </div>
+        <div>
+          <label for="suspect_phone" class="block text-xs font-semibold text-gray-600 mb-1.5">
+            Phone Number
+          </label>
+          <input type="text" id="suspect_phone" name="phone" placeholder="Enter phone number" class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
+        </div>
+      </div>
+
+      <div>
+        <label for="suspect_email" class="block text-xs font-semibold text-gray-600 mb-1.5">
+          Email Address
+        </label>
+        <input type="email" id="suspect_email" name="email" placeholder="example@domain.com" class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
+      </div>
+
+      <div>
+        <label for="suspect_phys" class="block text-xs font-semibold text-gray-600 mb-1.5">
+          Physical Description (height, marks, features)
+        </label>
+        <textarea id="suspect_phys" name="physical_description" rows="2" placeholder="e.g. 5'8&quot;, scar on left arm, dark hair" class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent resize-y"></textarea>
+      </div>
+
+      <div>
+        <label for="suspect_addr" class="block text-xs font-semibold text-gray-600 mb-1.5">
+          Full Address / Last Known Location
+        </label>
+        <textarea id="suspect_addr" name="address" rows="2" placeholder="Enter full address" class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent resize-y"></textarea>
+      </div>
+
+      <div>
+        <label for="suspect_photo" class="block text-xs font-semibold text-gray-600 mb-1.5">
+          Suspect Photograph (JPG/PNG, Max 5MB)
+        </label>
+        <input type="file" id="suspect_photo" name="photo" accept="image/jpeg,image/png" class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-accent/10 file:text-accent hover:file:bg-accent/20">
+      </div>
+
+      <div class="flex justify-end gap-3 pt-2 border-t border-gray-100">
+        <button type="button" onclick="closeSuspectModal()" class="px-4 py-2 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">
+          Cancel
+        </button>
+        <button type="submit" class="bg-accent hover:bg-accent-dark text-white px-5 py-2 rounded-xl text-sm font-semibold transition">
+          Save Suspect Profile
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
 
 <?php
 function statusBadge(string $status): string {
@@ -700,6 +829,97 @@ function renderEvidence(evidence, currentUser, caseObj) {
   }
 }
 
+function openSuspectModal() {
+  document.getElementById('suspect-modal').classList.remove('hidden');
+}
+
+function closeSuspectModal() {
+  document.getElementById('suspect-modal').classList.add('hidden');
+}
+
+function renderSuspects(suspects, currentUser, caseObj) {
+  const container = document.getElementById('suspects-list-container');
+  if (!container) return;
+  
+  if (!suspects || suspects.length === 0) {
+    container.innerHTML = `<p class="text-gray-400 text-sm italic">No suspect profiles recorded for this case.</p>`;
+    return;
+  }
+  
+  const statusMap = {
+    'identified':   { bg: 'bg-amber-50 text-amber-700 border-amber-200', text: 'Identified' },
+    'wanted':       { bg: 'bg-red-50 text-red-700 border-red-200', text: 'Wanted' },
+    'under_arrest': { bg: 'bg-purple-50 text-purple-700 border-purple-200', text: 'Under Arrest' },
+    'released':     { bg: 'bg-green-50 text-green-700 border-green-200', text: 'Released' },
+    'convicted':    { bg: 'bg-rose-50 text-rose-700 border-rose-200', text: 'Convicted' }
+  };
+
+  let html = `<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">`;
+  suspects.forEach(susp => {
+    const badge = statusMap[susp.status] || { bg: 'bg-gray-50 text-gray-700 border-gray-200', text: susp.status };
+    const genderText = susp.gender ? susp.gender.charAt(0).toUpperCase() + susp.gender.slice(1) : '—';
+    const dobText = susp.date_of_birth ? susp.date_of_birth : '—';
+    const phoneVal = susp.phone ? susp.phone : '—';
+    const emailVal = susp.email ? susp.email : '—';
+    const nidVal = susp.national_id ? susp.national_id : '—';
+    const physVal = susp.physical_description ? susp.physical_description : '—';
+    const addrVal = susp.address ? susp.address : '—';
+    
+    const photoHtml = susp.photo_path 
+      ? `<img src="${escapeHTML(susp.photo_path)}" alt="${escapeHTML(susp.full_name)}" class="w-12 h-12 rounded-xl object-cover border border-slate-200 flex-shrink-0">`
+      : `<div class="w-12 h-12 rounded-xl bg-navy/5 text-navy flex items-center justify-center flex-shrink-0"><i class="ti ti-user text-lg"></i></div>`;
+
+    html += `
+      <div class="border border-gray-100 rounded-xl p-4 bg-slate-50/30 hover:bg-slate-50 transition shadow-sm flex flex-col justify-between">
+        <div>
+          <div class="flex items-center gap-3 mb-3">
+            ${photoHtml}
+            <div>
+              <h4 class="font-bold text-gray-800 text-sm">${escapeHTML(susp.full_name)}</h4>
+              <span class="inline-block mt-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${badge.bg}">
+                ${badge.text}
+              </span>
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-2 gap-x-2 gap-y-1.5 text-xs text-gray-600 border-t border-gray-100 pt-3">
+            <div>
+              <span class="text-[10px] text-gray-400 block uppercase font-semibold">Gender</span>
+              <span class="font-medium text-gray-700">${escapeHTML(genderText)}</span>
+            </div>
+            <div>
+              <span class="text-[10px] text-gray-400 block uppercase font-semibold">Date of Birth</span>
+              <span class="font-medium text-gray-700">${escapeHTML(dobText)}</span>
+            </div>
+            <div>
+              <span class="text-[10px] text-gray-400 block uppercase font-semibold">National ID</span>
+              <span class="font-medium text-gray-700">${escapeHTML(nidVal)}</span>
+            </div>
+            <div>
+              <span class="text-[10px] text-gray-400 block uppercase font-semibold">Phone</span>
+              <span class="font-medium text-gray-700">${escapeHTML(phoneVal)}</span>
+            </div>
+            <div class="col-span-2">
+              <span class="text-[10px] text-gray-400 block uppercase font-semibold">Email</span>
+              <span class="font-medium text-gray-700 truncate block" title="${escapeHTML(emailVal)}">${escapeHTML(emailVal)}</span>
+            </div>
+            <div class="col-span-2">
+              <span class="text-[10px] text-gray-400 block uppercase font-semibold">Physical Description</span>
+              <p class="font-medium text-gray-700 whitespace-pre-line leading-tight text-[11px]">${escapeHTML(physVal)}</p>
+            </div>
+            <div class="col-span-2">
+              <span class="text-[10px] text-gray-400 block uppercase font-semibold">Address / Location</span>
+              <p class="font-medium text-gray-700 text-[11px]">${escapeHTML(addrVal)}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
 async function deleteEvidence(evidenceId, btn) {
   if (!confirm('Are you sure you want to delete this evidence file?')) return;
   btn.disabled = true;
@@ -734,6 +954,7 @@ async function loadCaseData() {
     if (data.success) {
       renderTimeline(data.timeline);
       renderEvidence(data.evidence, data.session_user, data.case);
+      renderSuspects(data.suspects, data.session_user, data.case);
     } else {
       console.error('Failed to load case data:', data.message);
       document.getElementById('timeline-count').textContent = 'Error loading';
@@ -858,6 +1079,40 @@ document.addEventListener('DOMContentLoaded', () => {
         uploadBtn.disabled = false;
       } finally {
         uploadBtn.innerHTML = oldText;
+      }
+    });
+  }
+
+  const suspectForm = document.getElementById('suspect-form');
+  if (suspectForm) {
+    suspectForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const submitBtn = this.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      const oldText = submitBtn.innerHTML;
+      submitBtn.innerHTML = '<i class="ti ti-loader-2 animate-spin text-sm"></i> Saving…';
+
+      try {
+        const fd = new FormData(this);
+        const res = await fetch('api/add_suspect_profile.php', {
+          method: 'POST',
+          body: fd
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          alert(data.message || 'Suspect profile added successfully!');
+          closeSuspectModal();
+          suspectForm.reset();
+          await loadCaseData();
+        } else {
+          alert(data.error || 'Failed to add suspect profile.');
+        }
+      } catch (err) {
+        alert('Network error during suspect profile addition.');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = oldText;
       }
     });
   }
