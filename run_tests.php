@@ -122,6 +122,26 @@ try {
         uploaded_at     TEXT    NOT NULL DEFAULT (datetime('now')),
         FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
     )");
+
+    // Create suspect_profiles table matching db.php schema
+    $pdo->exec("CREATE TABLE IF NOT EXISTS suspect_profiles (
+        id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+        case_id               INTEGER NOT NULL,
+        full_name             TEXT    NOT NULL,
+        national_id           TEXT,
+        phone                 TEXT,
+        email                 TEXT,
+        gender                TEXT    CHECK(gender IN ('male', 'female', 'other')),
+        date_of_birth         TEXT,
+        physical_description  TEXT,
+        address               TEXT,
+        status                TEXT    NOT NULL CHECK(status IN ('identified', 'wanted', 'under_arrest', 'released', 'convicted')) DEFAULT 'identified',
+        photo_path            TEXT,
+        created_by            INTEGER NOT NULL,
+        created_at            TEXT    NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+    )");
 } catch (Exception $e) {
     die("Test DB Setup Failed: " . $e->getMessage());
 }
@@ -506,6 +526,94 @@ $pdo->prepare("DELETE FROM cases WHERE id = ?")->execute([400]);
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM fir_evidence WHERE case_id = ?");
 $stmt->execute([400]);
 assert_equals(0, (int)$stmt->fetchColumn(), "Evidence records should be cascade-deleted when their associated case is deleted.");
+
+// 15. Suspect Profiles tests (SCRUM-132 to SCRUM-136)
+echo COLOR_CYAN . "=== Running Suspect Profile Tests (SCRUM-132 to SCRUM-136) ===" . COLOR_RESET . PHP_EOL;
+
+$assigned_case_susp = ['id' => 601, 'investigator_id' => 4];
+$other_case_susp = ['id' => 602, 'investigator_id' => 5];
+
+function simulate_suspect_add_access($user_role, $user_id, $case) {
+    if ($user_role === 'Admin' || $user_role === 'Officer') {
+        return true;
+    } elseif ($user_role === 'Investigator') {
+        return ((int)$case['investigator_id'] === (int)$user_id);
+    }
+    return false;
+}
+
+// A. Access Control Tests
+assert_true(simulate_suspect_add_access('Investigator', 4, $assigned_case_susp), "Assigned investigator should be allowed to add suspect profiles.");
+assert_true(!simulate_suspect_add_access('Investigator', 4, $other_case_susp), "Unassigned investigator should be denied adding suspect profiles.");
+assert_true(simulate_suspect_add_access('Admin', 4, $other_case_susp), "Admin should be allowed to add suspect profiles to any case.");
+assert_true(simulate_suspect_add_access('Officer', 4, $other_case_susp), "Officer should be allowed to add suspect profiles to any case.");
+
+// B. Input Validation Tests
+function mock_validate_suspect($full_name, $status, $gender, $dob, $nid, $phone, $email) {
+    if (trim($full_name) === '') {
+        return ['success' => false, 'error' => 'Full name is required.'];
+    }
+    if (!in_array($status, ['identified', 'wanted', 'under_arrest', 'released', 'convicted'], true)) {
+        return ['success' => false, 'error' => 'Invalid status option selected.'];
+    }
+    if ($gender !== '' && !in_array($gender, ['male', 'female', 'other'], true)) {
+        return ['success' => false, 'error' => 'Invalid gender option selected.'];
+    }
+    if ($dob !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dob)) {
+        return ['success' => false, 'error' => 'Date of birth must be in YYYY-MM-DD format.'];
+    }
+    if ($nid !== '' && !preg_match('/^\d{10,17}$/', $nid)) {
+        return ['success' => false, 'error' => 'National ID must be between 10 and 17 digits.'];
+    }
+    if ($phone !== '' && !preg_match('/^\+?\d{9,15}$/', $phone)) {
+        return ['success' => false, 'error' => 'Invalid phone number format.'];
+    }
+    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return ['success' => false, 'error' => 'Invalid email address format.'];
+    }
+    return ['success' => true];
+}
+
+assert_true(mock_validate_suspect('Kamil Chowdhury', 'wanted', 'male', '1990-05-12', '1234567890', '01712345678', 'kamil@test.com')['success'], "Valid suspect inputs should pass validation.");
+assert_true(!mock_validate_suspect('', 'wanted', 'male', '', '', '', '')['success'], "Empty full name should be rejected.");
+assert_true(!mock_validate_suspect('Kamil Chowdhury', 'invalid_status', 'male', '', '', '', '')['success'], "Invalid status should be rejected.");
+assert_true(!mock_validate_suspect('Kamil Chowdhury', 'wanted', 'alien', '', '', '', '')['success'], "Invalid gender should be rejected.");
+assert_true(!mock_validate_suspect('Kamil Chowdhury', 'wanted', 'male', '90-05-12', '', '', '')['success'], "Invalid DOB format should be rejected.");
+assert_true(!mock_validate_suspect('Kamil Chowdhury', 'wanted', 'male', '', '12345', '', '')['success'], "Invalid NID length should be rejected.");
+assert_true(!mock_validate_suspect('Kamil Chowdhury', 'wanted', 'male', '', '', '123', '')['success'], "Invalid phone number should be rejected.");
+assert_true(!mock_validate_suspect('Kamil Chowdhury', 'wanted', 'male', '', '', '', 'invalid_email')['success'], "Invalid email should be rejected.");
+
+// C. Database Model and Timeline Event Creation Tests
+$pdo->prepare("INSERT INTO cases (id, citizen_id, case_number, title, description, status, priority) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    ->execute([600, 1, 'CF-TEST-SUSPECT', 'Suspect Test Case', 'Testing suspect features', 'open', 'low']);
+
+$pdo->prepare("
+    INSERT INTO suspect_profiles (case_id, full_name, national_id, phone, email, gender, date_of_birth, physical_description, address, status, photo_path, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+")->execute([600, 'Tamal Ghosh', '1234567890123', '01812345678', 'tamal@test.com', 'male', '1988-10-15', 'Scar on left arm', 'Dhaka', 'wanted', 'uploads/suspect_tamal.png', 4]);
+
+$stmt = $pdo->prepare("SELECT * FROM suspect_profiles WHERE case_id = ?");
+$stmt->execute([600]);
+$suspRec = $stmt->fetch();
+assert_equals('Tamal Ghosh', $suspRec['full_name'], "Suspect name should be saved in database correctly.");
+assert_equals('wanted', $suspRec['status'], "Suspect status should be saved in database correctly.");
+assert_equals('1234567890123', $suspRec['national_id'], "Suspect NID should be saved in database correctly.");
+assert_equals('uploads/suspect_tamal.png', $suspRec['photo_path'], "Suspect photo path should be saved in database correctly.");
+
+// Insert corresponding timeline event
+$pdo->prepare("INSERT INTO case_timeline (case_id, event_type, title, description, created_by_name) VALUES (?, ?, ?, ?, ?)")
+    ->execute([600, 'other', 'Suspect Profile Added', 'Suspect profile added: Tamal Ghosh (Wanted)', 'Investigator Salam']);
+
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM case_timeline WHERE case_id = ? AND event_type = ? AND title = ?");
+$stmt->execute([600, 'other', 'Suspect Profile Added']);
+assert_equals(1, (int)$stmt->fetchColumn(), "Suspect profile addition timeline event should be logged.");
+
+// D. Cascade Delete Tests
+$pdo->prepare("DELETE FROM cases WHERE id = ?")->execute([600]);
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM suspect_profiles WHERE case_id = ?");
+$stmt->execute([600]);
+assert_equals(0, (int)$stmt->fetchColumn(), "Suspect profile records should be cascade-deleted when their associated case is deleted.");
+
 
 echo PHP_EOL;
 echo COLOR_CYAN . "=========================================================" . COLOR_RESET . PHP_EOL;
