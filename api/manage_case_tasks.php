@@ -130,7 +130,16 @@ try {
             ]);
         }
 
-        add_case_timeline_event($db, $case_id, 'other', 'Task Created', "Task created: {$title}", $currentUserName);
+        $assigneeNameText = '';
+        if ($assigned_to !== null) {
+            $stmtUser = $db->prepare("SELECT full_name FROM users WHERE id = ?");
+            $stmtUser->execute([$assigned_to]);
+            $assigneeName = $stmtUser->fetchColumn();
+            if ($assigneeName) {
+                $assigneeNameText = " (Assigned to {$assigneeName})";
+            }
+        }
+        add_case_timeline_event($db, $case_id, 'other', 'Task Created', "Task created: {$title}{$assigneeNameText}", $currentUserName);
 
     } elseif ($action === 'update_status') {
         $task_id = (int)($_POST['task_id'] ?? 0);
@@ -203,7 +212,18 @@ try {
             ]);
         }
 
-        add_case_timeline_event($db, $case_id, 'other', 'Task Edited', "Task updated: {$title}", $currentUserName);
+        $assigneeNameText = '';
+        if ($assigned_to !== null) {
+            $stmtUser = $db->prepare("SELECT full_name FROM users WHERE id = ?");
+            $stmtUser->execute([$assigned_to]);
+            $assigneeName = $stmtUser->fetchColumn();
+            if ($assigneeName) {
+                $assigneeNameText = " (Assigned to {$assigneeName})";
+            }
+        } else {
+            $assigneeNameText = " (Unassigned)";
+        }
+        add_case_timeline_event($db, $case_id, 'other', 'Task Edited', "Task updated: {$title}{$assigneeNameText}", $currentUserName);
 
     } elseif ($action === 'delete') {
         $task_id = (int)($_POST['task_id'] ?? 0);

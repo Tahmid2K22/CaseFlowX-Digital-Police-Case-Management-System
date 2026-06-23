@@ -813,6 +813,16 @@ $stmt->execute([900, 'Assigned Task 1']);
 $task = $stmt->fetch();
 assert_equals($investigatorUserId, (int)$task['assigned_to'], "Task assigned_to should be the Investigator user ID.");
 
+// Simulate timeline event logged for task creation
+$pdo->prepare("INSERT INTO case_timeline (case_id, event_type, title, description, created_by_name) VALUES (?, ?, ?, ?, ?)")
+    ->execute([900, 'other', 'Task Created', "Task created: Assigned Task 1 (Assigned to {$investigatorName})", 'Test Admin']);
+
+// Verify timeline event description contains the assignee name
+$stmt = $pdo->prepare("SELECT description FROM case_timeline WHERE case_id = 900 AND title = 'Task Created'");
+$stmt->execute();
+$tlDesc = $stmt->fetchColumn();
+assert_true(strpos($tlDesc, $investigatorName) !== false, "Task Created timeline description should contain assignee name.");
+
 // 4. Verify task query LEFT JOIN returns assignee_name
 $stmt = $pdo->prepare("
     SELECT t.*, u.full_name AS assignee_name 
@@ -840,6 +850,16 @@ $pdo->prepare("INSERT INTO notifications (user_id, title, message) VALUES (?, ?,
 $stmt = $pdo->prepare("SELECT assigned_to FROM case_tasks WHERE id = ?");
 $stmt->execute([$task['id']]);
 assert_equals($officerUserId, (int)$stmt->fetchColumn(), "Task assignee should be updated to Officer user ID.");
+
+// Simulate timeline event logged for task reassignment
+$pdo->prepare("INSERT INTO case_timeline (case_id, event_type, title, description, created_by_name) VALUES (?, ?, ?, ?, ?)")
+    ->execute([900, 'other', 'Task Edited', "Task updated: Assigned Task 1 (Assigned to Officer)", 'Test Admin']);
+
+// Verify reassigned timeline event contains "Assigned to"
+$stmt = $pdo->prepare("SELECT description FROM case_timeline WHERE case_id = 900 AND title = 'Task Edited'");
+$stmt->execute();
+$tlDescEdit = $stmt->fetchColumn();
+assert_true(strpos($tlDescEdit, "Assigned to") !== false, "Task Edited timeline description should contain 'Assigned to'.");
 
 // Verify reassigned notification was logged
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND title = 'Task Assigned'");
