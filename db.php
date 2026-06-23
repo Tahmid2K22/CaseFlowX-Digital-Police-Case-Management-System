@@ -351,6 +351,40 @@ function init_schema(PDO $pdo): void {
 
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_evidence_case ON fir_evidence(case_id)');
 
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS physical_evidence (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            case_id             INTEGER NOT NULL,
+            item_name           TEXT    NOT NULL,
+            description         TEXT,
+            serial_number       TEXT,
+            recovered_at        TEXT    NOT NULL,
+            recovered_location  TEXT    NOT NULL,
+            recovered_by        TEXT    NOT NULL,
+            current_custodian   TEXT    NOT NULL,
+            status              TEXT    NOT NULL DEFAULT 'Secured',
+            created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
+        )
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS evidence_chain_of_custody (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            evidence_id         INTEGER NOT NULL,
+            officer_name        TEXT    NOT NULL,
+            action_type         TEXT    NOT NULL,
+            custody_date        TEXT    NOT NULL,
+            location            TEXT    NOT NULL,
+            notes               TEXT,
+            created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (evidence_id) REFERENCES physical_evidence(id) ON DELETE CASCADE
+        )
+    ");
+
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_phys_ev_case ON physical_evidence(case_id)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_custody_ev ON evidence_chain_of_custody(evidence_id)');
+
     // FIR indexes
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_fir_officer ON fir_records(officer_id)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_fir_status ON fir_records(status)");

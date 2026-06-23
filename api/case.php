@@ -106,6 +106,127 @@ try {
         } else {
             echo json_encode(['success' => false, 'message' => 'Failed to update status. Ensure the case is accepted by you.']);
         }
+    } elseif ($action === 'log_physical_evidence') {
+        // Auth check
+        $stmtCheck = $db->prepare("SELECT id FROM cases WHERE id = ? AND officer_id = ?");
+        $stmtCheck->execute([$case_id, $officer['id']]);
+        if (!$stmtCheck->fetch()) {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized. Ensure the case is accepted by you.']);
+            exit;
+        }
+
+        $item_name = trim($_POST['item_name'] ?? '');
+        $description = trim($_POST['description'] ?? '');
+        $serial_number = trim($_POST['serial_number'] ?? '');
+        $recovered_at = trim($_POST['recovered_at'] ?? '');
+        $recovered_location = trim($_POST['recovered_location'] ?? '');
+        $recovered_by = trim($_POST['recovered_by'] ?? '');
+        $current_custodian = trim($_POST['current_custodian'] ?? '');
+        $status = trim($_POST['status'] ?? 'Secured');
+        $initial_notes = trim($_POST['initial_notes'] ?? '');
+
+        if ($item_name === '' || $recovered_at === '' || $recovered_location === '' || $recovered_by === '' || $current_custodian === '') {
+            echo json_encode(['success' => false, 'message' => 'Missing required evidence fields.']);
+            exit;
+        }
+
+        // Start transaction
+        $db->beginTransaction();
+        try {
+            $stmtInsert = $db->prepare("
+                INSERT INTO physical_evidence (case_id, item_name, description, serial_number, recovered_at, recovered_location, recovered_by, current_custodian, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+            $stmtInsert->execute([$case_id, $item_name, $description, $serial_number, $recovered_at, $recovered_location, $recovered_by, $current_custodian, $status]);
+            $evidence_id = $db->lastInsertId();
+
+            // Create initial chain-of-custody record
+            $stmtCustody = $db->prepare("
+                INSERT INTO evidence_chain_of_custody (evidence_id, officer_name, action_type, custody_date, location, notes)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ");
+            $notes = "Evidence logged and secured. Initial custodian: " . $current_custodian;
+            if ($initial_notes !== '') {
+                $notes .= ". Notes: " . $initial_notes;
+            }
+            $stmtCustody->execute([$evidence_id, $recovered_by, 'Recovery', $recovered_at, $recovered_location, $notes]);
+
+            $db->commit();
+            echo json_encode(['success' => true, 'message' => 'Physical evidence logged successfully.']);
+        } catch (Exception $e) {
+            $db->rollBack();
+            echo json_encode(['success' => false, 'message' => 'Failed to log physical evidence: ' . $e->getMessage()]);
+        }
+    } elseif ($action === 'add_custody_transfer') {
+        // Auth check
+        $stmtCheck = $db->prepare("SELECT id FROM cases WHERE id = ? AND officer_id = ?");
+        $stmtCheck->execute([$case_id, $officer['id']]);
+        if (!$stmtCheck->fetch()) {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized. Ensure the case is accepted by you.']);
+            exit;
+        }
+
+        $evidence_id = (int)($_POST['evidence_id'] ?? 0);
+        $officer_name = trim($_POST['officer_name'] ?? '');
+        $action_type = trim($_POST['action_type'] ?? '');
+        $custody_date = trim($_POST['custody_date'] ?? '');
+        $location = trim($_POST['location'] ?? '');
+        $notes = trim($_POST['notes'] ?? '');
+        $new_status = trim($_POST['status'] ?? ''); // Optional status update
+
+        if (!$evidence_id || $officer_name === '' || $action_type === '' || $custody_date === '' || $location === '') {
+            echo json_encode(['success' => false, 'message' => 'Missing required custody transfer fields.']);
+            exit;
+        }
+
+        // Verify evidence belongs to the case
+        $stmtEvCheck = $db->prepare("SELECT id, status, current_custodian FROM physical_evidence WHERE id = ? AND case_id = ?");
+        $stmtEvCheck->execute([$evidence_id, $case_id]);
+        $evidenceItem = $stmtEvCheck->fetch();
+        if (!$evidenceItem) {
+            echo json_encode(['success' => false, 'message' => 'Evidence item not found or does not belong to this case.']);
+            exit;
+        }
+
+        // Start transaction
+        $db->beginTransaction();
+        try {
+            // Insert timeline record
+            $stmtCustody = $db->prepare("
+                INSERT INTO evidence_chain_of_custody (evidence_id, officer_name, action_type, custody_date, location, notes)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ");
+            $stmtCustody->execute([$evidence_id, $officer_name, $action_type, $custody_date, $location, $notes]);
+
+            // Update parent physical evidence custodian and status
+            $update_status = ($new_status !== '') ? $new_status : $evidenceItem['status'];
+            if ($action_type === 'Release' && $new_status === '') {
+                $update_status = 'Released';
+            } elseif ($action_type === 'Destruction' && $new_status === '') {
+                $update_status = 'Destroyed';
+            }
+
+            $stmtUpdateEv = $db->prepare("
+                UPDATE physical_evidence
+                SET current_custodian = ?, status = ?
+                WHERE id = ?
+            ");
+            
+            $new_custodian = $officer_name;
+            if ($action_type === 'Release') {
+                $new_custodian = 'Released to Owner';
+            } elseif ($action_type === 'Destruction') {
+                $new_custodian = 'None (Destroyed)';
+            }
+            
+            $stmtUpdateEv->execute([$new_custodian, $update_status, $evidence_id]);
+
+            $db->commit();
+            echo json_encode(['success' => true, 'message' => 'Custody transfer logged successfully.']);
+        } catch (Exception $e) {
+            $db->rollBack();
+            echo json_encode(['success' => false, 'message' => 'Failed to log custody transfer: ' . $e->getMessage()]);
+        }
     } else {
         echo json_encode(['success' => false, 'message' => 'Invalid action']);
     }
