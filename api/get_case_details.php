@@ -102,7 +102,13 @@ try {
     $suspects = $suspStmt->fetchAll();
 
     // Fetch case tasks
-    $taskStmt = $db->prepare("SELECT * FROM case_tasks WHERE case_id = ? ORDER BY id ASC");
+    $taskStmt = $db->prepare("
+        SELECT t.*, u.full_name AS assignee_name 
+        FROM case_tasks t 
+        LEFT JOIN users u ON t.assigned_to = u.id 
+        WHERE t.case_id = ? 
+        ORDER BY t.id ASC
+    ");
     $taskStmt->execute([$case_id]);
     $tasks = $taskStmt->fetchAll();
 
