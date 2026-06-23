@@ -1138,7 +1138,7 @@ document.addEventListener('click', function(e) {
   }
 });
 
-function openTaskModal(taskId = null) {
+function openTaskModal(taskId = null, autoOpenAssignee = false) {
   document.getElementById('task-modal').classList.remove('hidden');
   const titleInput = document.getElementById('task_title');
   const descTextarea = document.getElementById('task_desc');
@@ -1176,6 +1176,12 @@ function openTaskModal(taskId = null) {
       triggerText.textContent = matchedItem ? matchedItem.textContent.trim().replace(/\s+/g, ' ') : '-- Unassigned --';
     } else {
       triggerText.textContent = '-- Unassigned --';
+    }
+
+    if (autoOpenAssignee) {
+      setTimeout(() => {
+        toggleAssigneeDropdown();
+      }, 50);
     }
   } else {
     modalTitle.innerHTML = '<i class="ti ti-layout-grid-add"></i> Add New Task';
@@ -1351,13 +1357,24 @@ function renderTaskBoard(tasks, currentUser, caseObj) {
           ? `<p class="text-xs text-slate-500 mt-1 leading-relaxed whitespace-pre-line">${escapeHTML(t.description)}</p>` 
           : '';
 
-        const assigneeHtml = t.assignee_name
-          ? `<div class="mt-2 flex items-center gap-1 text-[10px] font-semibold text-slate-600 bg-slate-100/70 border border-slate-150 px-2 py-0.5 rounded-md w-fit">
-               <i class="ti ti-user text-xs text-slate-400"></i> ${escapeHTML(t.assignee_name)}
-             </div>`
-          : `<div class="mt-2 flex items-center gap-1 text-[10px] font-semibold text-slate-400 border border-dashed border-slate-200 px-2 py-0.5 rounded-md w-fit">
-               <i class="ti ti-user-x text-xs text-slate-350"></i> Unassigned
-             </div>`;
+        let assigneeHtml = '';
+        if (isAllowedToManage) {
+          assigneeHtml = t.assignee_name
+            ? `<div onclick="openTaskModal(${t.id}, true)" class="mt-2 flex items-center gap-1 text-[10px] font-semibold text-slate-600 bg-slate-100/70 border border-slate-150 px-2 py-0.5 rounded-md w-fit cursor-pointer hover:bg-slate-200 transition" title="Change assignment">
+                 <i class="ti ti-user text-xs text-slate-400"></i> ${escapeHTML(t.assignee_name)}
+               </div>`
+            : `<div onclick="openTaskModal(${t.id}, true)" class="mt-2 flex items-center gap-1 text-[10px] font-semibold text-slate-400 border border-dashed border-slate-200 px-2 py-0.5 rounded-md w-fit cursor-pointer hover:bg-slate-50 transition" title="Assign to team member">
+                 <i class="ti ti-user-x text-xs text-slate-350"></i> Unassigned
+               </div>`;
+        } else {
+          assigneeHtml = t.assignee_name
+            ? `<div class="mt-2 flex items-center gap-1 text-[10px] font-semibold text-slate-600 bg-slate-100/70 border border-slate-150 px-2 py-0.5 rounded-md w-fit">
+                 <i class="ti ti-user text-xs text-slate-400"></i> ${escapeHTML(t.assignee_name)}
+               </div>`
+            : `<div class="mt-2 flex items-center gap-1 text-[10px] font-semibold text-slate-400 border border-dashed border-slate-200 px-2 py-0.5 rounded-md w-fit">
+                 <i class="ti ti-user-x text-xs text-slate-350"></i> Unassigned
+               </div>`;
+        }
 
         html += `
           <div class="bg-white border border-slate-150 hover:border-slate-200 rounded-xl p-3.5 shadow-sm hover:shadow-md transition">
