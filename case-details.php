@@ -744,8 +744,8 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
 
 <!-- Add / Edit Task Modal -->
 <div id="task-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-  <div class="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-xl animate-in fade-in duration-200">
-    <div class="bg-navy px-6 py-4 flex items-center justify-between">
+  <div class="bg-white rounded-2xl max-w-md w-full shadow-xl animate-in fade-in duration-200">
+    <div class="bg-navy px-6 py-4 rounded-t-2xl flex items-center justify-between">
       <h3 class="text-white font-semibold text-lg flex items-center gap-2" id="task-modal-title-text">
         <i class="ti ti-layout-grid-add"></i> Add New Task
       </h3>
