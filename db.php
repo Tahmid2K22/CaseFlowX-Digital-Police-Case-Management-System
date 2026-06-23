@@ -355,6 +355,41 @@ function init_schema(PDO $pdo): void {
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_fir_officer ON fir_records(officer_id)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_fir_status ON fir_records(status)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_fir_number ON fir_records(fir_number)");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS criminals (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            name                TEXT    NOT NULL,
+            nid                 TEXT    NOT NULL UNIQUE,
+            date_of_birth       TEXT,
+            gender              TEXT,
+            photo_path          TEXT,
+            crimes_committed    TEXT,
+            status              TEXT    NOT NULL DEFAULT 'Wanted' CHECK(status IN ('Wanted', 'In Custody', 'Released', 'Convicted')),
+            last_known_location TEXT,
+            created_at          TEXT    NOT NULL DEFAULT (datetime('now'))
+        )
+    ");
+
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_criminals_nid ON criminals(nid)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_criminals_name ON criminals(name)');
+
+    // Seed initial criminals if empty
+    try {
+        $count = (int)$pdo->query("SELECT COUNT(*) FROM criminals")->fetchColumn();
+        if ($count === 0) {
+            $stmtSeed = $pdo->prepare("
+                INSERT INTO criminals (name, nid, date_of_birth, gender, crimes_committed, status, last_known_location)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ");
+            $stmtSeed->execute(['Akash Ahmed', '1234567890', '1988-10-12', 'male', 'Robbery, Assault', 'Wanted', 'Mirpur, Dhaka']);
+            $stmtSeed->execute(['Tasnim Rahman', '0987654321', '1992-04-15', 'female', 'Fraud, Embezzlement', 'In Custody', 'Central Jail, Dhaka']);
+            $stmtSeed->execute(['Kamal Uddin', '1122334455', '1980-08-20', 'male', 'Drug Trafficking', 'Convicted', 'Kashimpur Jail']);
+            $stmtSeed->execute(['Sohail Rana', '5544332211', '1995-12-05', 'male', 'Theft', 'Released', 'Uttara, Dhaka']);
+        }
+    } catch (PDOException $e) {
+        error_log("Criminals table seeding failed: " . $e->getMessage());
+    }
 }
 
 function require_citizen(): array {
