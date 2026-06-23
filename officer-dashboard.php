@@ -95,6 +95,9 @@ try {
         <div class="text-[11px] text-white/55">Badge: <?= htmlspecialchars($officer['badge_number']) ?> · Station: <?= htmlspecialchars($officer['station_code']) ?></div>
       </div>
       <div class="h-6 w-px bg-white/20 hidden sm:block"></div>
+      <a href="search-criminals.php" class="border border-white/20 hover:bg-white/10 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition">
+        <i class="ti ti-search text-xs"></i> Search Criminals
+      </a>
       <a href="file-fir.php" class="bg-accent hover:bg-accent-dark text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shadow">
         <i class="ti ti-file-plus"></i> File FIR
       </a>
