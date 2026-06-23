@@ -38,6 +38,14 @@ if (!empty($_SESSION['officer_id'])) {
     $citizen = require_citizen();
 }
 
+$teamMembers = [];
+try {
+    $stmtTeam = $db->query("SELECT id, full_name, role FROM users WHERE role IN ('Officer', 'Investigator') AND status = 'Active' ORDER BY full_name ASC");
+    $teamMembers = $stmtTeam->fetchAll();
+} catch (Exception $e) {
+    error_log("Failed to load team members: " . $e->getMessage());
+}
+
 try {
     // Fetch case with assigned officer name and citizen complainant name
     $stmt = $db->prepare("
@@ -736,8 +744,8 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
 
 <!-- Add / Edit Task Modal -->
 <div id="task-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-  <div class="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-xl animate-in fade-in duration-200">
-    <div class="bg-navy px-6 py-4 flex items-center justify-between">
+  <div class="bg-white rounded-2xl max-w-md w-full shadow-xl animate-in fade-in duration-200">
+    <div class="bg-navy px-6 py-4 rounded-t-2xl flex items-center justify-between">
       <h3 class="text-white font-semibold text-lg flex items-center gap-2" id="task-modal-title-text">
         <i class="ti ti-layout-grid-add"></i> Add New Task
       </h3>
@@ -762,6 +770,34 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
           Description (Optional)
         </label>
         <textarea id="task_desc" name="description" rows="3" placeholder="Describe the steps, locations, or requirements..." class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent resize-y"></textarea>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1.5">
+          Assign To (Team Member)
+        </label>
+        <input type="hidden" id="task_assignee" name="assigned_to" value="">
+        <div class="relative w-full">
+          <div id="task_assignee_trigger" onclick="toggleAssigneeDropdown()" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent bg-white flex items-center justify-between cursor-pointer select-none">
+            <span id="task_assignee_trigger_text" class="text-slate-700">-- Unassigned --</span>
+            <i class="ti ti-chevron-down text-slate-400 text-xs"></i>
+          </div>
+          <div id="task_assignee_dropdown" class="hidden absolute left-0 right-0 mt-1.5 bg-white border border-gray-200 rounded-2xl shadow-xl z-50 p-2.5 space-y-2 animate-in fade-in slide-in-from-top-1 duration-150">
+            <div class="relative">
+              <input type="text" id="task_assignee_search" placeholder="🔍 Search officer/investigator name or role..." class="w-full px-4 py-2 rounded-xl border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" oninput="filterAssigneesCustom()">
+            </div>
+            <div id="task_assignee_list" class="max-h-48 overflow-y-auto space-y-0.5 pr-1">
+              <div onclick="selectAssigneeCustom('', '-- Unassigned --')" class="w-full text-left px-3 py-2 text-xs font-medium rounded-lg hover:bg-slate-50 cursor-pointer text-slate-500">
+                -- Unassigned --
+              </div>
+              <?php foreach ($teamMembers as $member): ?>
+                <div data-value="<?= $member['id'] ?>" onclick="selectAssigneeCustom('<?= $member['id'] ?>', '<?= htmlspecialchars($member['full_name']) ?> (<?= htmlspecialchars($member['role']) ?>)')" class="assignee-item w-full text-left px-3 py-2 text-xs font-semibold rounded-lg hover:bg-slate-50 cursor-pointer text-slate-700" data-search-text="<?= htmlspecialchars(strtolower($member['full_name'] . ' ' . $member['role'])) ?>">
+                  <?= htmlspecialchars($member['full_name']) ?> <span class="text-[10px] font-semibold text-slate-450 bg-slate-100 px-1.5 py-0.5 rounded ml-1"><?= htmlspecialchars($member['role']) ?></span>
+                </div>
+              <?php endforeach; ?>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="flex justify-end gap-3 pt-2 border-t border-gray-100">
@@ -1050,13 +1086,78 @@ async function deleteEvidence(evidenceId, btn) {
 
 let currentCaseTasks = [];
 
-function openTaskModal(taskId = null) {
+function toggleAssigneeDropdown() {
+  const dropdown = document.getElementById('task_assignee_dropdown');
+  if (!dropdown) return;
+  const isHidden = dropdown.classList.contains('hidden');
+  if (isHidden) {
+    dropdown.classList.remove('hidden');
+    const searchInput = document.getElementById('task_assignee_search');
+    if (searchInput) {
+      searchInput.value = '';
+      filterAssigneesCustom();
+      searchInput.focus();
+    }
+  } else {
+    dropdown.classList.add('hidden');
+  }
+}
+
+function selectAssigneeCustom(value, label) {
+  const input = document.getElementById('task_assignee');
+  const triggerText = document.getElementById('task_assignee_trigger_text');
+  if (input && triggerText) {
+    input.value = value;
+    triggerText.textContent = label;
+  }
+  const dropdown = document.getElementById('task_assignee_dropdown');
+  if (dropdown) {
+    dropdown.classList.add('hidden');
+  }
+}
+
+function filterAssigneesCustom() {
+  const query = document.getElementById('task_assignee_search').value.toLowerCase().trim();
+  const items = document.querySelectorAll('#task_assignee_list .assignee-item');
+  items.forEach(item => {
+    const text = item.getAttribute('data-search-text') || "";
+    if (text.includes(query)) {
+      item.style.display = "";
+    } else {
+      item.style.display = "none";
+    }
+  });
+}
+
+// Close assignee dropdown when clicking outside
+document.addEventListener('click', function(e) {
+  const trigger = document.getElementById('task_assignee_trigger');
+  const dropdown = document.getElementById('task_assignee_dropdown');
+  if (trigger && dropdown && !trigger.contains(e.target) && !dropdown.contains(e.target)) {
+    dropdown.classList.add('hidden');
+  }
+});
+
+function openTaskModal(taskId = null, autoOpenAssignee = false) {
   document.getElementById('task-modal').classList.remove('hidden');
   const titleInput = document.getElementById('task_title');
   const descTextarea = document.getElementById('task_desc');
+  const assigneeSelect = document.getElementById('task_assignee');
+  const triggerText = document.getElementById('task_assignee_trigger_text');
   const idInput = document.getElementById('task-id');
   const actionInput = document.getElementById('task-action');
   const modalTitle = document.getElementById('task-modal-title-text');
+
+  // Reset dropdown state
+  const dropdown = document.getElementById('task_assignee_dropdown');
+  if (dropdown) {
+    dropdown.classList.add('hidden');
+  }
+  const searchInput = document.getElementById('task_assignee_search');
+  if (searchInput) {
+    searchInput.value = '';
+    filterAssigneesCustom();
+  }
 
   if (taskId) {
     const t = currentCaseTasks.find(x => parseInt(x.id) === parseInt(taskId));
@@ -1065,12 +1166,31 @@ function openTaskModal(taskId = null) {
     idInput.value = taskId;
     titleInput.value = t ? t.title : '';
     descTextarea.value = t ? (t.description || '') : '';
+    
+    const assigneeVal = (t && t.assigned_to) ? t.assigned_to : '';
+    assigneeSelect.value = assigneeVal;
+    
+    if (assigneeVal) {
+      const items = Array.from(document.querySelectorAll('#task_assignee_list .assignee-item'));
+      const matchedItem = items.find(item => item.getAttribute('data-value') === String(assigneeVal));
+      triggerText.textContent = matchedItem ? matchedItem.textContent.trim().replace(/\s+/g, ' ') : '-- Unassigned --';
+    } else {
+      triggerText.textContent = '-- Unassigned --';
+    }
+
+    if (autoOpenAssignee) {
+      setTimeout(() => {
+        toggleAssigneeDropdown();
+      }, 50);
+    }
   } else {
     modalTitle.innerHTML = '<i class="ti ti-layout-grid-add"></i> Add New Task';
     actionInput.value = 'add';
     idInput.value = '';
     titleInput.value = '';
     descTextarea.value = '';
+    assigneeSelect.value = '';
+    triggerText.textContent = '-- Unassigned --';
   }
 }
 
@@ -1237,10 +1357,30 @@ function renderTaskBoard(tasks, currentUser, caseObj) {
           ? `<p class="text-xs text-slate-500 mt-1 leading-relaxed whitespace-pre-line">${escapeHTML(t.description)}</p>` 
           : '';
 
+        let assigneeHtml = '';
+        if (isAllowedToManage) {
+          assigneeHtml = t.assignee_name
+            ? `<div onclick="openTaskModal(${t.id}, true)" class="mt-2 flex items-center gap-1 text-[10px] font-semibold text-slate-600 bg-slate-100/70 border border-slate-150 px-2 py-0.5 rounded-md w-fit cursor-pointer hover:bg-slate-200 transition" title="Change assignment">
+                 <i class="ti ti-user text-xs text-slate-400"></i> ${escapeHTML(t.assignee_name)}
+               </div>`
+            : `<div onclick="openTaskModal(${t.id}, true)" class="mt-2 flex items-center gap-1 text-[10px] font-semibold text-slate-400 border border-dashed border-slate-200 px-2 py-0.5 rounded-md w-fit cursor-pointer hover:bg-slate-50 transition" title="Assign to team member">
+                 <i class="ti ti-user-x text-xs text-slate-350"></i> Unassigned
+               </div>`;
+        } else {
+          assigneeHtml = t.assignee_name
+            ? `<div class="mt-2 flex items-center gap-1 text-[10px] font-semibold text-slate-600 bg-slate-100/70 border border-slate-150 px-2 py-0.5 rounded-md w-fit">
+                 <i class="ti ti-user text-xs text-slate-400"></i> ${escapeHTML(t.assignee_name)}
+               </div>`
+            : `<div class="mt-2 flex items-center gap-1 text-[10px] font-semibold text-slate-400 border border-dashed border-slate-200 px-2 py-0.5 rounded-md w-fit">
+                 <i class="ti ti-user-x text-xs text-slate-350"></i> Unassigned
+               </div>`;
+        }
+
         html += `
           <div class="bg-white border border-slate-150 hover:border-slate-200 rounded-xl p-3.5 shadow-sm hover:shadow-md transition">
             <h4 class="font-bold text-slate-700 text-xs leading-tight">${escapeHTML(t.title)}</h4>
             ${descHtml}
+            ${assigneeHtml}
             ${actionButtons}
           </div>
         `;

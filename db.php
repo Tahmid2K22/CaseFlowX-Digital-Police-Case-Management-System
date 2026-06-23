@@ -414,14 +414,30 @@ function init_schema(PDO $pdo): void {
             description     TEXT,
             status          TEXT    NOT NULL CHECK(status IN ('todo', 'in_progress', 'done')) DEFAULT 'todo',
             created_by      INTEGER NOT NULL,
+            assigned_to     INTEGER,
             created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
             updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
-            FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+            FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL
         )
     ");
 
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_tasks_case ON case_tasks(case_id)');
+
+    // Dynamic migration: Ensure assigned_to exists in case_tasks table
+    try {
+        $existingTaskCols = [];
+        $stmtCol = $pdo->query("PRAGMA table_info(case_tasks)");
+        while ($row = $stmtCol->fetch()) {
+            $existingTaskCols[] = $row['name'];
+        }
+        if (!in_array('assigned_to', $existingTaskCols, true)) {
+            $pdo->exec("ALTER TABLE case_tasks ADD COLUMN assigned_to INTEGER");
+        }
+    } catch (PDOException $e) {
+        error_log("Case tasks table migration failed: " . $e->getMessage());
+    }
 
 
 
