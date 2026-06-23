@@ -63,6 +63,21 @@ try {
     $evStmt->execute([$caseId]);
     $evidenceList = $evStmt->fetchAll();
 
+    // Fetch physical evidence list
+    $peStmt = $db->prepare("SELECT * FROM physical_evidence WHERE case_id = ? ORDER BY id DESC");
+    $peStmt->execute([$caseId]);
+    $physicalEvidenceList = $peStmt->fetchAll();
+
+    // Fetch custody history for each physical evidence item
+    $custodyListByEvidence = [];
+    if (count($physicalEvidenceList) > 0) {
+        $cocStmt = $db->prepare("SELECT * FROM evidence_chain_of_custody WHERE evidence_id = ? ORDER BY custody_date ASC, id ASC");
+        foreach ($physicalEvidenceList as $pe) {
+            $cocStmt->execute([$pe['id']]);
+            $custodyListByEvidence[$pe['id']] = $cocStmt->fetchAll();
+        }
+    }
+
 } catch (PDOException $e) {
     die("Database error: " . $e->getMessage());
 }
@@ -312,6 +327,120 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
         <?php endif; ?>
       </div>
 
+      <!-- Physical Evidence & Chain of Custody -->
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex justify-between items-center border-b border-gray-100 pb-3 mb-4">
+          <h2 class="text-navy font-bold text-lg flex items-center gap-2">
+            <i class="ti ti-archive text-accent"></i> Physical Evidence & Chain of Custody
+          </h2>
+          <?php if ($isAssignedToMe): ?>
+            <button onclick="openPhysicalEvidenceModal()" class="bg-accent/10 hover:bg-accent/20 text-accent px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition">
+              <i class="ti ti-plus"></i> Log Evidence
+            </button>
+          <?php endif; ?>
+        </div>
+
+        <?php if (count($physicalEvidenceList) > 0): ?>
+          <div class="space-y-6">
+            <?php foreach ($physicalEvidenceList as $pe): ?>
+              <div class="border border-gray-100 rounded-2xl p-5 bg-[#F8FAFC]">
+                <div class="flex flex-wrap justify-between items-start gap-4 mb-4 border-b border-gray-100/50 pb-3">
+                  <div>
+                    <h3 class="text-navy font-bold text-base"><?= htmlspecialchars($pe['item_name']) ?></h3>
+                    <?php if (!empty($pe['description'])): ?>
+                      <p class="text-gray-500 text-xs mt-0.5"><?= htmlspecialchars($pe['description']) ?></p>
+                    <?php endif; ?>
+                    <?php if (!empty($pe['serial_number'])): ?>
+                      <p class="text-gray-400 text-[11px] mt-1 font-mono">Serial/ID: <?= htmlspecialchars($pe['serial_number']) ?></p>
+                    <?php endif; ?>
+                  </div>
+                  <div class="flex flex-col items-end gap-1.5">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold border border-accent/20 bg-accent/5 text-accent-dark">
+                      <?= htmlspecialchars($pe['status']) ?>
+                    </span>
+                    <span class="text-[11px] text-gray-400">Custodian: <strong class="text-gray-700"><?= htmlspecialchars($pe['current_custodian']) ?></strong></span>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-gray-600 mb-4 bg-white p-3 rounded-xl border border-gray-100">
+                  <div>
+                    <span class="text-gray-400 block font-semibold uppercase text-[9px] tracking-wider">Recovered Location</span>
+                    <span class="font-medium text-gray-800"><?= htmlspecialchars($pe['recovered_location']) ?></span>
+                  </div>
+                  <div>
+                    <span class="text-gray-400 block font-semibold uppercase text-[9px] tracking-wider">Recovered Date</span>
+                    <span class="font-medium text-gray-800"><?= !empty($pe['recovered_at']) ? date('M d, Y H:i', strtotime($pe['recovered_at'])) : '—' ?></span>
+                  </div>
+                  <div>
+                    <span class="text-gray-400 block font-semibold uppercase text-[9px] tracking-wider">Recovered By</span>
+                    <span class="font-medium text-gray-800"><?= htmlspecialchars($pe['recovered_by']) ?></span>
+                  </div>
+                </div>
+
+                <!-- Chain of Custody Timeline -->
+                <div>
+                  <h4 class="text-xs font-bold text-navy uppercase tracking-wider mb-3 flex items-center gap-1">
+                    <i class="ti ti-git-commit text-accent"></i> Chain of Custody Timeline
+                  </h4>
+                  <div class="relative pl-6 border-l border-dashed border-gray-200 space-y-4 ml-2">
+                    <?php 
+                    $timeline = $custodyListByEvidence[$pe['id']] ?? [];
+                    foreach ($timeline as $idx => $step):
+                      $stepIcon = 'ti-circle-dot';
+                      $iconColor = 'text-accent bg-accent/10 border-accent/20';
+                      if ($step['action_type'] === 'Recovery') {
+                          $stepIcon = 'ti-package';
+                          $iconColor = 'text-blue-600 bg-blue-50 border-blue-100';
+                      } elseif ($step['action_type'] === 'Transfer') {
+                          $stepIcon = 'ti-arrows-left-right';
+                          $iconColor = 'text-orange-600 bg-orange-50 border-orange-100';
+                      } elseif ($step['action_type'] === 'Release') {
+                          $stepIcon = 'ti-circle-check';
+                          $iconColor = 'text-green-600 bg-green-50 border-green-100';
+                      } elseif ($step['action_type'] === 'Destruction') {
+                          $stepIcon = 'ti-trash';
+                          $iconColor = 'text-red-600 bg-red-50 border-red-100';
+                      }
+                    ?>
+                      <div class="relative">
+                        <!-- Bullet Icon -->
+                        <span class="absolute -left-[35px] top-0 w-6 h-6 rounded-full flex items-center justify-center border <?= $iconColor ?> text-xs font-semibold shadow-sm">
+                          <i class="ti <?= $stepIcon ?>"></i>
+                        </span>
+                        
+                        <div>
+                          <div class="flex flex-wrap items-center justify-between gap-2">
+                            <span class="text-xs font-bold text-gray-800"><?= htmlspecialchars($step['action_type']) ?> — Custodian: <?= htmlspecialchars($step['officer_name']) ?></span>
+                            <span class="text-[10px] text-gray-400 font-medium"><?= !empty($step['custody_date']) ? date('M d, Y H:i', strtotime($step['custody_date'])) : '—' ?></span>
+                          </div>
+                          <p class="text-[11px] text-gray-500 mt-0.5">Location: <span class="font-medium text-gray-700"><?= htmlspecialchars($step['location']) ?></span></p>
+                          <?php if (!empty($step['notes'])): ?>
+                            <p class="text-[11px] text-gray-400 italic mt-1 bg-white px-2 py-1 rounded border border-gray-100"><?= htmlspecialchars($step['notes']) ?></p>
+                          <?php endif; ?>
+                        </div>
+                      </div>
+                    <?php endforeach; ?>
+                  </div>
+                </div>
+
+                <?php if ($isAssignedToMe && $pe['status'] !== 'Released' && $pe['status'] !== 'Destroyed'): ?>
+                  <div class="mt-4 pt-4 border-t border-gray-100 flex justify-end">
+                    <button onclick="openCustodyTransferModal(<?= $pe['id'] ?>, '<?= htmlspecialchars($pe['item_name'], ENT_QUOTES) ?>')" class="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition">
+                      <i class="ti ti-arrows-left-right text-gray-500"></i> Update Custody / Transfer
+                    </button>
+                  </div>
+                <?php endif; ?>
+              </div>
+            <?php endforeach; ?>
+          </div>
+        <?php else: ?>
+          <div class="text-center py-6 border border-dashed border-gray-200 rounded-2xl bg-gray-50/50">
+            <i class="ti ti-archive text-gray-300 text-3xl mb-1.5 block"></i>
+            <p class="text-gray-400 text-sm italic">No physical evidence logged for this case.</p>
+          </div>
+        <?php endif; ?>
+      </div>
+
     </div>
 
     <!-- Right 1 Column: Assignment & Info -->
@@ -411,6 +540,193 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
         </button>
         <button type="submit" class="bg-accent hover:bg-accent-dark text-white px-5 py-2 rounded-xl text-sm font-semibold transition">
           Confirm & Assign
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Log Physical Evidence Modal -->
+<div id="physical-evidence-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-xl animate-in fade-in duration-200">
+    <div class="bg-navy px-6 py-4 flex items-center justify-between">
+      <h3 class="text-white font-semibold text-lg flex items-center gap-2">
+        <i class="ti ti-archive"></i> Log Physical Evidence
+      </h3>
+      <button onclick="closePhysicalEvidenceModal()" class="text-white/75 hover:text-white transition">
+        <i class="ti ti-x text-lg"></i>
+      </button>
+    </div>
+    <form id="physical-evidence-form" class="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+      <input type="hidden" name="case_id" value="<?= $caseId ?>">
+      <input type="hidden" name="action" value="log_physical_evidence">
+      
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="sm:col-span-2">
+          <label for="pe_item_name" class="block text-xs font-semibold text-gray-600 mb-1.5">
+            Item Name/Type <span class="text-red-400">*</span>
+          </label>
+          <input type="text" id="pe_item_name" name="item_name" required placeholder="e.g. 9mm Pistol, Bloody Shirt, Wallet" class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
+        </div>
+        
+        <div class="sm:col-span-2">
+          <label for="pe_description" class="block text-xs font-semibold text-gray-600 mb-1.5">
+            Item Description
+          </label>
+          <textarea id="pe_description" name="description" rows="2" placeholder="Provide distinct characteristics, color, condition, labels, etc." class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"></textarea>
+        </div>
+        
+        <div>
+          <label for="pe_serial_number" class="block text-xs font-semibold text-gray-600 mb-1.5">
+            Serial Number / Brand ID
+          </label>
+          <input type="text" id="pe_serial_number" name="serial_number" placeholder="e.g. Serial #, Model, Brand" class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
+        </div>
+        
+        <div>
+          <label for="pe_status" class="block text-xs font-semibold text-gray-600 mb-1.5">
+            Initial Status <span class="text-red-400">*</span>
+          </label>
+          <select id="pe_status" name="status" required class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent bg-white">
+            <option value="Secured">Secured (Evidence Room)</option>
+            <option value="In Transit">In Transit</option>
+            <option value="Sent to Lab">Sent to Lab</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="pe_recovered_at" class="block text-xs font-semibold text-gray-600 mb-1.5">
+            Date & Time Recovered <span class="text-red-400">*</span>
+          </label>
+          <input type="datetime-local" id="pe_recovered_at" name="recovered_at" required value="<?= date('Y-m-d\TH:i') ?>" class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
+        </div>
+
+        <div>
+          <label for="pe_recovered_by" class="block text-xs font-semibold text-gray-600 mb-1.5">
+            Recovered By <span class="text-red-400">*</span>
+          </label>
+          <input type="text" id="pe_recovered_by" name="recovered_by" required value="<?= htmlspecialchars($officer['full_name'] ?? '') ?>" class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
+        </div>
+
+        <div class="sm:col-span-2">
+          <label for="pe_recovered_location" class="block text-xs font-semibold text-gray-600 mb-1.5">
+            Location Found / Recovered <span class="text-red-400">*</span>
+          </label>
+          <input type="text" id="pe_recovered_location" name="recovered_location" required placeholder="e.g. Under driver seat of vehicle, 43 Elm St" class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
+        </div>
+
+        <div>
+          <label for="pe_current_custodian" class="block text-xs font-semibold text-gray-600 mb-1.5">
+            Initial Custodian <span class="text-red-400">*</span>
+          </label>
+          <input type="text" id="pe_current_custodian" name="current_custodian" required placeholder="e.g. Officer Smith, Locker room A" value="<?= htmlspecialchars($officer['full_name'] ?? '') ?>" class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
+        </div>
+
+        <div class="sm:col-span-2">
+          <label for="pe_initial_notes" class="block text-xs font-semibold text-gray-600 mb-1.5">
+            Initial Custody Remarks/Notes
+          </label>
+          <input type="text" id="pe_initial_notes" name="initial_notes" placeholder="e.g. Bagged, tagged, sealed with evidence tape" class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-3 pt-2">
+        <button type="button" onclick="closePhysicalEvidenceModal()" class="px-4 py-2 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">
+          Cancel
+        </button>
+        <button type="submit" class="bg-accent hover:bg-accent-dark text-white px-5 py-2 rounded-xl text-sm font-semibold transition">
+          Log Evidence
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Update Custody / Transfer Modal -->
+<div id="custody-transfer-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-xl animate-in fade-in duration-200">
+    <div class="bg-navy px-6 py-4 flex items-center justify-between">
+      <h3 class="text-white font-semibold text-lg flex items-center gap-2">
+        <i class="ti ti-arrows-left-right"></i> Update Custody / Transfer
+      </h3>
+      <button onclick="closeCustodyTransferModal()" class="text-white/75 hover:text-white transition">
+        <i class="ti ti-x text-lg"></i>
+      </button>
+    </div>
+    <form id="custody-transfer-form" class="p-6 space-y-4">
+      <input type="hidden" name="case_id" value="<?= $caseId ?>">
+      <input type="hidden" name="action" value="add_custody_transfer">
+      <input type="hidden" id="transfer_evidence_id" name="evidence_id" value="">
+
+      <div>
+        <span class="block text-xs font-semibold text-gray-400 uppercase">Evidence Item</span>
+        <p id="transfer_evidence_name" class="text-sm font-semibold text-navy mt-0.5">Item Name</p>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label for="coc_action_type" class="block text-xs font-semibold text-gray-600 mb-1.5">
+            Action Type <span class="text-red-400">*</span>
+          </label>
+          <select id="coc_action_type" name="action_type" required onchange="handleCocActionChange()" class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent bg-white">
+            <option value="Transfer">Transfer Custody</option>
+            <option value="Lab Analysis">Send to Forensic Lab</option>
+            <option value="Court Presentation">Present in Court</option>
+            <option value="Release">Release to Owner</option>
+            <option value="Destruction">Destruction</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="coc_status" class="block text-xs font-semibold text-gray-600 mb-1.5">
+            New Status (Optional)
+          </label>
+          <select id="coc_status" name="status" class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent bg-white">
+            <option value="">-- Keep Current Status --</option>
+            <option value="Secured">Secured (Evidence Room)</option>
+            <option value="In Transit">In Transit</option>
+            <option value="Sent to Lab">Sent to Lab</option>
+            <option value="In Court">In Court</option>
+            <option value="Released">Released</option>
+            <option value="Destroyed">Destroyed</option>
+          </select>
+        </div>
+
+        <div class="sm:col-span-2" id="custodian_container">
+          <label for="coc_officer_name" class="block text-xs font-semibold text-gray-600 mb-1.5">
+            New Custodian Name / Entity <span class="text-red-400">*</span>
+          </label>
+          <input type="text" id="coc_officer_name" name="officer_name" required placeholder="e.g. Lab Analyst Jane, Officer Smith" class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
+        </div>
+
+        <div class="sm:col-span-2">
+          <label for="coc_location" class="block text-xs font-semibold text-gray-600 mb-1.5">
+            Location <span class="text-red-400">*</span>
+          </label>
+          <input type="text" id="coc_location" name="location" required placeholder="e.g. Forensic Lab Rm 101, Storage Locker B" class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
+        </div>
+
+        <div class="sm:col-span-2">
+          <label for="coc_custody_date" class="block text-xs font-semibold text-gray-600 mb-1.5">
+            Date & Time of Action <span class="text-red-400">*</span>
+          </label>
+          <input type="datetime-local" id="coc_custody_date" name="custody_date" required value="<?= date('Y-m-d\TH:i') ?>" class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
+        </div>
+
+        <div class="sm:col-span-2">
+          <label for="coc_notes" class="block text-xs font-semibold text-gray-600 mb-1.5">
+            Remarks / Notes
+          </label>
+          <textarea id="coc_notes" name="notes" rows="2" placeholder="State reason for transfer, package integrity, seals, etc." class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"></textarea>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-3 pt-2">
+        <button type="button" onclick="closeCustodyTransferModal()" class="px-4 py-2 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">
+          Cancel
+        </button>
+        <button type="submit" class="bg-accent hover:bg-accent-dark text-white px-5 py-2 rounded-xl text-sm font-semibold transition">
+          Save Transfer
         </button>
       </div>
     </form>
@@ -631,10 +947,103 @@ async function uploadDetailEvidence(caseId, event) {
     errorDiv.textContent = 'Network error during file upload';
     errorDiv.classList.remove('hidden');
     loading.classList.add('hidden');
+}
   } finally {
     event.target.value = ''; // Reset file input
   }
 }
+
+function openPhysicalEvidenceModal() {
+  document.getElementById('pe_recovered_at').value = new Date().toISOString().slice(0, 16);
+  document.getElementById('physical-evidence-modal').classList.remove('hidden');
+}
+
+function closePhysicalEvidenceModal() {
+  document.getElementById('physical-evidence-modal').classList.add('hidden');
+  document.getElementById('physical-evidence-form').reset();
+}
+
+function openCustodyTransferModal(evidenceId, itemName) {
+  document.getElementById('transfer_evidence_id').value = evidenceId;
+  document.getElementById('transfer_evidence_name').textContent = itemName;
+  document.getElementById('coc_custody_date').value = new Date().toISOString().slice(0, 16);
+  handleCocActionChange(); // Sync inputs
+  document.getElementById('custody-transfer-modal').classList.remove('hidden');
+}
+
+function closeCustodyTransferModal() {
+  document.getElementById('custody-transfer-modal').classList.add('hidden');
+  document.getElementById('custody-transfer-form').reset();
+}
+
+function handleCocActionChange() {
+  const actionType = document.getElementById('coc_action_type').value;
+  const custodianInput = document.getElementById('coc_officer_name');
+  const custodianContainer = document.getElementById('custodian_container');
+  
+  if (actionType === 'Release') {
+    custodianInput.value = 'Released to Owner';
+    custodianContainer.classList.add('hidden');
+  } else if (actionType === 'Destruction') {
+    custodianInput.value = 'None (Destroyed)';
+    custodianContainer.classList.add('hidden');
+  } else {
+    custodianInput.value = '';
+    custodianContainer.classList.remove('hidden');
+  }
+}
+
+document.getElementById('physical-evidence-form')?.addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const submitBtn = this.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  const oldText = submitBtn.innerHTML;
+  submitBtn.innerHTML = '<i class="ti ti-loader-2 animate-spin text-base"></i> Saving…';
+  
+  try {
+    const fd = new FormData(this);
+    const res = await fetch('api/case.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+      closePhysicalEvidenceModal();
+      location.reload();
+    } else {
+      alert(data.message || 'Failed to log physical evidence');
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = oldText;
+    }
+  } catch (err) {
+    alert('Network error');
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = oldText;
+  }
+});
+
+document.getElementById('custody-transfer-form')?.addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const submitBtn = this.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  const oldText = submitBtn.innerHTML;
+  submitBtn.innerHTML = '<i class="ti ti-loader-2 animate-spin text-base"></i> Saving…';
+  
+  try {
+    const fd = new FormData(this);
+    const res = await fetch('api/case.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+      closeCustodyTransferModal();
+      location.reload();
+    } else {
+      alert(data.message || 'Failed to update custody');
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = oldText;
+    }
+  } catch (err) {
+    alert('Network error');
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = oldText;
+  }
+});
 </script>
 </body>
 </html>
