@@ -131,6 +131,13 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
     }
   }
 </script>
+<style>
+  .task-column-dropzone.drag-over {
+    background-color: rgba(29, 158, 117, 0.08) !important;
+    outline: 2px dashed rgba(29, 158, 117, 0.4) !important;
+    outline-offset: 1px;
+  }
+</style>
 </head>
 <body class="bg-[#F4F6F9] min-h-screen flex flex-col justify-between">
   <div class="flex-grow">
