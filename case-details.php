@@ -1226,6 +1226,44 @@ async function updateTaskStatus(taskId, newStatus) {
   }
 }
 
+function dragStartTask(e, taskId) {
+  e.dataTransfer.setData('text/plain', taskId);
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function allowDropTask(e) {
+  e.preventDefault();
+}
+
+function dragEnterTask(e) {
+  e.preventDefault();
+  const dropzone = e.target.closest('.task-column-dropzone');
+  if (dropzone) {
+    dropzone.classList.add('drag-over');
+  }
+}
+
+function dragLeaveTask(e) {
+  const dropzone = e.target.closest('.task-column-dropzone');
+  if (dropzone && !dropzone.contains(e.relatedTarget)) {
+    dropzone.classList.remove('drag-over');
+  }
+}
+
+async function dropTask(e, newStatus) {
+  e.preventDefault();
+  const dropzone = e.target.closest('.task-column-dropzone');
+  if (dropzone) {
+    dropzone.classList.remove('drag-over');
+  }
+  const taskId = e.dataTransfer.getData('text/plain');
+  if (!taskId) return;
+  const task = currentCaseTasks.find(t => parseInt(t.id) === parseInt(taskId));
+  if (task && task.status !== newStatus) {
+    await updateTaskStatus(parseInt(taskId), newStatus);
+  }
+}
+
 async function deleteTask(taskId) {
   if (!confirm('Are you sure you want to delete this task?')) return;
   const caseId = <?= $caseId ?>;
@@ -1314,6 +1352,11 @@ function renderTaskBoard(tasks, currentUser, caseObj) {
     const col = columns[status];
     const taskCount = col.list.length;
     
+    let dropEvents = '';
+    if (isAllowedToManage) {
+      dropEvents = `ondragover="allowDropTask(event)" ondragenter="dragEnterTask(event)" ondragleave="dragLeaveTask(event)" ondrop="dropTask(event, '${status}')"` ;
+    }
+
     html += `
       <div class="flex flex-col rounded-2xl border ${col.border} ${col.bg} p-4">
         <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
@@ -1322,7 +1365,7 @@ function renderTaskBoard(tasks, currentUser, caseObj) {
             <span class="px-2 py-0.5 rounded-full text-xs font-bold ${col.badge}">${taskCount}</span>
           </span>
         </div>
-        <div class="space-y-3 flex-grow overflow-y-auto max-h-[400px]">
+        <div class="space-y-3 flex-grow overflow-y-auto max-h-[400px] task-column-dropzone p-1 rounded-xl transition duration-150" ${dropEvents}>
     `;
 
     if (taskCount === 0) {
@@ -1334,7 +1377,11 @@ function renderTaskBoard(tasks, currentUser, caseObj) {
     } else {
       col.list.forEach(t => {
         let actionButtons = '';
+        let dragProps = '';
+        let dragClass = '';
         if (isAllowedToManage) {
+          dragProps = `draggable="true" ondragstart="dragStartTask(event, ${t.id})"`;
+          dragClass = 'cursor-grab active:cursor-grabbing';
           let moveLeftBtn = '';
           let moveRightBtn = '';
           if (status === 'in_progress') {
@@ -1384,7 +1431,7 @@ function renderTaskBoard(tasks, currentUser, caseObj) {
         }
 
         html += `
-          <div class="bg-white border border-slate-150 hover:border-slate-200 rounded-xl p-3.5 shadow-sm hover:shadow-md transition">
+          <div ${dragProps} class="bg-white border border-slate-150 hover:border-slate-200 rounded-xl p-3.5 shadow-sm hover:shadow-md transition ${dragClass}">
             <h4 class="font-bold text-slate-700 text-xs leading-tight">${escapeHTML(t.title)}</h4>
             ${descHtml}
             ${assigneeHtml}
