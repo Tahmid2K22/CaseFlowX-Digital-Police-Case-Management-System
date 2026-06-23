@@ -100,7 +100,7 @@ try {
     json_exit(true, 'Case filed successfully.', [
         'case_id'     => $newId,
         'case_number' => $caseNumber,
-        'redirect'    => 'case-details.php?id=' . $newId,
+        'redirect'    => 'case-details.php?id=' . $newId . '&submitted=1',
     ]);
 
 } catch (PDOException $e) {

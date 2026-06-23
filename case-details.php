@@ -107,6 +107,22 @@ function priorityBadge(string $priority): string {
       <span class="text-gray-700 font-medium"><?= htmlspecialchars($case['case_number']) ?></span>
     </div>
 
+    <?php if (isset($_GET['submitted']) && $_GET['submitted'] === '1'): ?>
+      <!-- Success Confirmation Banner -->
+      <div class="mb-6 flex items-start gap-4 p-5 rounded-2xl border bg-emerald-50 border-emerald-100 text-emerald-800 shadow-sm">
+        <div class="w-10 h-10 rounded-xl bg-accent text-white flex items-center justify-center flex-shrink-0 shadow-sm">
+          <i class="ti ti-circle-check text-2xl"></i>
+        </div>
+        <div class="flex-1">
+          <h3 class="font-bold text-base leading-tight mb-1 text-accent-dark">Complaint Filed Successfully</h3>
+          <p class="text-sm text-emerald-700/90 leading-normal">
+            Your complaint has been successfully registered online. The assigned case number is <strong class="font-bold text-navy"><?= htmlspecialchars($case['case_number']) ?></strong>.
+            You do not need to visit the station; you can track its progress directly from this dashboard.
+          </p>
+        </div>
+      </div>
+    <?php endif; ?>
+
     <!-- Case Card -->
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
       <div class="px-8 py-6 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
