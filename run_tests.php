@@ -150,10 +150,12 @@ try {
         description     TEXT,
         status          TEXT    NOT NULL CHECK(status IN ('todo', 'in_progress', 'done')) DEFAULT 'todo',
         created_by      INTEGER NOT NULL,
+        assigned_to     INTEGER,
         created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
         updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
         FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
-        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL
     )");
 } catch (Exception $e) {
     die("Test DB Setup Failed: " . $e->getMessage());
@@ -774,6 +776,78 @@ assert_equals('in_progress', $stmt->fetchColumn(), "Case status should be update
 // Cleanup
 $pdo->prepare("DELETE FROM cases WHERE id = ?")->execute([800]);
 
+// G. Case Task Assignment and Notifications Tests (SCRUM-21)
+echo COLOR_CYAN . "=== Running Case Task Assignment Tests (SCRUM-21) ===" . COLOR_RESET . PHP_EOL;
+
+// Fetch Investigator and Officer user details dynamically to prevent ID mismatches
+$stmt = $pdo->prepare("SELECT id, full_name FROM users WHERE role = 'Investigator' LIMIT 1");
+$stmt->execute();
+$invUser = $stmt->fetch();
+$investigatorUserId = (int)$invUser['id'];
+$investigatorName = $invUser['full_name'];
+
+$stmt = $pdo->prepare("SELECT id, full_name FROM users WHERE role = 'Officer' LIMIT 1");
+$stmt->execute();
+$offUser = $stmt->fetch();
+$officerUserId = (int)$offUser['id'];
+
+$stmt = $pdo->prepare("SELECT id FROM users WHERE role = 'Admin' LIMIT 1");
+$stmt->execute();
+$adminUserId = (int)$stmt->fetchColumn();
+
+// 1. Create a test case
+$pdo->prepare("INSERT INTO cases (id, citizen_id, case_number, title, description, status, priority, investigator_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    ->execute([900, 1, 'CF-TEST-ASSIGN-TASK', 'Task Assignment Test Case', 'Testing task assignment', 'in_progress', 'low', $investigatorUserId]);
+
+// 2. Create a task assigned to our Investigator
+$pdo->prepare("INSERT INTO case_tasks (case_id, title, description, status, created_by, assigned_to) VALUES (?, ?, ?, ?, ?, ?)")
+    ->execute([900, 'Assigned Task 1', 'Testing task assignment', 'todo', $adminUserId, $investigatorUserId]);
+
+// Simulate notification triggered by assignment
+$pdo->prepare("INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)")
+    ->execute([$investigatorUserId, 'New Task Assigned', "You have been assigned a new task: 'Assigned Task 1' on Case CF-TEST-ASSIGN-TASK."]);
+
+// 3. Verify task is in DB and has correct assignee ID
+$stmt = $pdo->prepare("SELECT * FROM case_tasks WHERE case_id = ? AND title = ?");
+$stmt->execute([900, 'Assigned Task 1']);
+$task = $stmt->fetch();
+assert_equals($investigatorUserId, (int)$task['assigned_to'], "Task assigned_to should be the Investigator user ID.");
+
+// 4. Verify task query LEFT JOIN returns assignee_name
+$stmt = $pdo->prepare("
+    SELECT t.*, u.full_name AS assignee_name 
+    FROM case_tasks t 
+    LEFT JOIN users u ON t.assigned_to = u.id 
+    WHERE t.id = ?
+");
+$stmt->execute([$task['id']]);
+$taskWithAssignee = $stmt->fetch();
+assert_equals($investigatorName, $taskWithAssignee['assignee_name'], "Task assignee_name should join and resolve to the investigator's full name.");
+
+// 5. Verify notification was logged
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND title = 'New Task Assigned'");
+$stmt->execute([$investigatorUserId]);
+assert_equals(1, (int)$stmt->fetchColumn(), "Notification should be generated for the assignee.");
+
+// 6. Reassign task to Officer (user ID $officerUserId)
+$pdo->prepare("UPDATE case_tasks SET assigned_to = ? WHERE id = ?")->execute([$officerUserId, $task['id']]);
+
+// Simulate notification for reassignment
+$pdo->prepare("INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)")
+    ->execute([$officerUserId, 'Task Assigned', "You have been assigned the task: 'Assigned Task 1' on Case CF-TEST-ASSIGN-TASK."]);
+
+// Verify reassignment in DB
+$stmt = $pdo->prepare("SELECT assigned_to FROM case_tasks WHERE id = ?");
+$stmt->execute([$task['id']]);
+assert_equals($officerUserId, (int)$stmt->fetchColumn(), "Task assignee should be updated to Officer user ID.");
+
+// Verify reassigned notification was logged
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND title = 'Task Assigned'");
+$stmt->execute([$officerUserId]);
+assert_equals(1, (int)$stmt->fetchColumn(), "Notification should be generated for the new assignee.");
+
+// Cleanup
+$pdo->prepare("DELETE FROM cases WHERE id = ?")->execute([900]);
 
 echo PHP_EOL;
 echo COLOR_CYAN . "=========================================================" . COLOR_RESET . PHP_EOL;

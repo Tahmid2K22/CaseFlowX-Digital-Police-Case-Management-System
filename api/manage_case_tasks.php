@@ -105,6 +105,7 @@ try {
     if ($action === 'add') {
         $title = trim($_POST['title'] ?? '');
         $description = trim($_POST['description'] ?? '');
+        $assigned_to = isset($_POST['assigned_to']) && $_POST['assigned_to'] !== '' ? (int)$_POST['assigned_to'] : null;
 
         if ($title === '') {
             echo json_encode(['success' => false, 'error' => 'Task title is required.']);
@@ -112,10 +113,22 @@ try {
         }
 
         $stmtInsert = $db->prepare("
-            INSERT INTO case_tasks (case_id, title, description, status, created_by)
-            VALUES (?, ?, ?, 'todo', ?)
+            INSERT INTO case_tasks (case_id, title, description, status, created_by, assigned_to)
+            VALUES (?, ?, ?, 'todo', ?, ?)
         ");
-        $stmtInsert->execute([$case_id, $title, $description, $currentUserId]);
+        $stmtInsert->execute([$case_id, $title, $description, $currentUserId, $assigned_to]);
+
+        if ($assigned_to !== null) {
+            $stmtNotif = $db->prepare("
+                INSERT INTO notifications (user_id, title, message)
+                VALUES (?, 'New Task Assigned', ?)
+            ");
+            $caseNumber = $case['case_number'] ?? '';
+            $stmtNotif->execute([
+                $assigned_to,
+                "You have been assigned a new task: '{$title}' on Case {$caseNumber}."
+            ]);
+        }
 
         add_case_timeline_event($db, $case_id, 'other', 'Task Created', "Task created: {$title}", $currentUserName);
 
@@ -152,6 +165,7 @@ try {
         $task_id = (int)($_POST['task_id'] ?? 0);
         $title = trim($_POST['title'] ?? '');
         $description = trim($_POST['description'] ?? '');
+        $assigned_to = isset($_POST['assigned_to']) && $_POST['assigned_to'] !== '' ? (int)$_POST['assigned_to'] : null;
 
         if ($title === '') {
             echo json_encode(['success' => false, 'error' => 'Task title is required.']);
@@ -168,12 +182,26 @@ try {
             exit;
         }
 
+        $old_assigned_to = $task['assigned_to'] ? (int)$task['assigned_to'] : null;
+
         $stmtUpdate = $db->prepare("
             UPDATE case_tasks 
-            SET title = ?, description = ?, updated_at = datetime('now') 
+            SET title = ?, description = ?, assigned_to = ?, updated_at = datetime('now') 
             WHERE id = ?
         ");
-        $stmtUpdate->execute([$title, $description, $task_id]);
+        $stmtUpdate->execute([$title, $description, $assigned_to, $task_id]);
+
+        if ($assigned_to !== null && $assigned_to !== $old_assigned_to) {
+            $stmtNotif = $db->prepare("
+                INSERT INTO notifications (user_id, title, message)
+                VALUES (?, 'Task Assigned', ?)
+            ");
+            $caseNumber = $case['case_number'] ?? '';
+            $stmtNotif->execute([
+                $assigned_to,
+                "You have been assigned the task: '{$title}' on Case {$caseNumber}."
+            ]);
+        }
 
         add_case_timeline_event($db, $case_id, 'other', 'Task Edited', "Task updated: {$title}", $currentUserName);
 
@@ -205,7 +233,13 @@ try {
     $stmtUpdateCase->execute([$currentUserId, $case_id]);
 
     // Fetch updated tasks list
-    $taskStmt = $db->prepare("SELECT * FROM case_tasks WHERE case_id = ? ORDER BY id ASC");
+    $taskStmt = $db->prepare("
+        SELECT t.*, u.full_name AS assignee_name 
+        FROM case_tasks t 
+        LEFT JOIN users u ON t.assigned_to = u.id 
+        WHERE t.case_id = ? 
+        ORDER BY t.id ASC
+    ");
     $taskStmt->execute([$case_id]);
     $tasks = $taskStmt->fetchAll();
 

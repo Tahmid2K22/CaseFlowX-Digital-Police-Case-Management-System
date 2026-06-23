@@ -38,6 +38,14 @@ if (!empty($_SESSION['officer_id'])) {
     $citizen = require_citizen();
 }
 
+$teamMembers = [];
+try {
+    $stmtTeam = $db->query("SELECT id, full_name, role FROM users WHERE role IN ('Admin', 'Officer', 'Investigator') AND status = 'Active' ORDER BY full_name ASC");
+    $teamMembers = $stmtTeam->fetchAll();
+} catch (Exception $e) {
+    error_log("Failed to load team members: " . $e->getMessage());
+}
+
 try {
     // Fetch case with assigned officer name and citizen complainant name
     $stmt = $db->prepare("
@@ -764,6 +772,18 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
         <textarea id="task_desc" name="description" rows="3" placeholder="Describe the steps, locations, or requirements..." class="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent resize-y"></textarea>
       </div>
 
+      <div>
+        <label for="task_assignee" class="block text-xs font-semibold text-gray-600 mb-1.5">
+          Assign To (Team Member)
+        </label>
+        <select id="task_assignee" name="assigned_to" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent bg-white">
+          <option value="">-- Unassigned --</option>
+          <?php foreach ($teamMembers as $member): ?>
+            <option value="<?= $member['id'] ?>"><?= htmlspecialchars($member['full_name']) ?> (<?= htmlspecialchars($member['role']) ?>)</option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+
       <div class="flex justify-end gap-3 pt-2 border-t border-gray-100">
         <button type="button" onclick="closeTaskModal()" class="px-4 py-2 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">
           Cancel
@@ -1054,6 +1074,7 @@ function openTaskModal(taskId = null) {
   document.getElementById('task-modal').classList.remove('hidden');
   const titleInput = document.getElementById('task_title');
   const descTextarea = document.getElementById('task_desc');
+  const assigneeSelect = document.getElementById('task_assignee');
   const idInput = document.getElementById('task-id');
   const actionInput = document.getElementById('task-action');
   const modalTitle = document.getElementById('task-modal-title-text');
@@ -1065,12 +1086,14 @@ function openTaskModal(taskId = null) {
     idInput.value = taskId;
     titleInput.value = t ? t.title : '';
     descTextarea.value = t ? (t.description || '') : '';
+    assigneeSelect.value = (t && t.assigned_to) ? t.assigned_to : '';
   } else {
     modalTitle.innerHTML = '<i class="ti ti-layout-grid-add"></i> Add New Task';
     actionInput.value = 'add';
     idInput.value = '';
     titleInput.value = '';
     descTextarea.value = '';
+    assigneeSelect.value = '';
   }
 }
 
@@ -1237,10 +1260,19 @@ function renderTaskBoard(tasks, currentUser, caseObj) {
           ? `<p class="text-xs text-slate-500 mt-1 leading-relaxed whitespace-pre-line">${escapeHTML(t.description)}</p>` 
           : '';
 
+        const assigneeHtml = t.assignee_name
+          ? `<div class="mt-2 flex items-center gap-1 text-[10px] font-semibold text-slate-600 bg-slate-100/70 border border-slate-150 px-2 py-0.5 rounded-md w-fit">
+               <i class="ti ti-user text-xs text-slate-400"></i> ${escapeHTML(t.assignee_name)}
+             </div>`
+          : `<div class="mt-2 flex items-center gap-1 text-[10px] font-semibold text-slate-400 border border-dashed border-slate-200 px-2 py-0.5 rounded-md w-fit">
+               <i class="ti ti-user-x text-xs text-slate-350"></i> Unassigned
+             </div>`;
+
         html += `
           <div class="bg-white border border-slate-150 hover:border-slate-200 rounded-xl p-3.5 shadow-sm hover:shadow-md transition">
             <h4 class="font-bold text-slate-700 text-xs leading-tight">${escapeHTML(t.title)}</h4>
             ${descHtml}
+            ${assigneeHtml}
             ${actionButtons}
           </div>
         `;
