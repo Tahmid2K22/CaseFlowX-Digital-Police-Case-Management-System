@@ -129,7 +129,7 @@ if (empty($_SESSION['logged_in']) || empty($_SESSION['citizen_id'])) {
                            text-sm font-semibold flex items-center gap-2 transition">
               <i class="ti ti-send text-base"></i> Submit Complaint
             </button>
-            <a href="dashboard1.php"
+            <a href="dashboard.php"
                class="px-6 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-medium text-sm hover:bg-gray-50 transition">
               Cancel
             </a>
