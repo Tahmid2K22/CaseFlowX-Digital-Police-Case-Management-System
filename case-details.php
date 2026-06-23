@@ -40,7 +40,7 @@ if (!empty($_SESSION['officer_id'])) {
 
 $teamMembers = [];
 try {
-    $stmtTeam = $db->query("SELECT id, full_name, role FROM users WHERE role IN ('Admin', 'Officer', 'Investigator') AND status = 'Active' ORDER BY full_name ASC");
+    $stmtTeam = $db->query("SELECT id, full_name, role FROM users WHERE role IN ('Officer', 'Investigator') AND status = 'Active' ORDER BY full_name ASC");
     $teamMembers = $stmtTeam->fetchAll();
 } catch (Exception $e) {
     error_log("Failed to load team members: " . $e->getMessage());
@@ -776,6 +776,9 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
         <label for="task_assignee" class="block text-xs font-semibold text-gray-600 mb-1.5">
           Assign To (Team Member)
         </label>
+        <div class="relative mb-2">
+          <input type="text" id="task_assignee_search" placeholder="🔍 Search officer/investigator name or role..." class="w-full px-4 py-2 rounded-xl border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" oninput="filterAssignees()">
+        </div>
         <select id="task_assignee" name="assigned_to" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent bg-white">
           <option value="">-- Unassigned --</option>
           <?php foreach ($teamMembers as $member): ?>
@@ -1069,6 +1072,7 @@ async function deleteEvidence(evidenceId, btn) {
 }
 
 let currentCaseTasks = [];
+let allAssigneeOptions = [];
 
 function openTaskModal(taskId = null) {
   document.getElementById('task-modal').classList.remove('hidden');
@@ -1078,6 +1082,25 @@ function openTaskModal(taskId = null) {
   const idInput = document.getElementById('task-id');
   const actionInput = document.getElementById('task-action');
   const modalTitle = document.getElementById('task-modal-title-text');
+
+  // Cache options once when the modal is opened the first time
+  if (allAssigneeOptions.length === 0 && assigneeSelect) {
+    for (let i = 0; i < assigneeSelect.options.length; i++) {
+      const opt = assigneeSelect.options[i];
+      allAssigneeOptions.push({
+        value: opt.value,
+        text: opt.text,
+        searchText: opt.text.toLowerCase()
+      });
+    }
+  }
+
+  // Reset filter input and option list
+  const searchInput = document.getElementById('task_assignee_search');
+  if (searchInput) {
+    searchInput.value = '';
+    filterAssignees();
+  }
 
   if (taskId) {
     const t = currentCaseTasks.find(x => parseInt(x.id) === parseInt(taskId));
@@ -1095,6 +1118,27 @@ function openTaskModal(taskId = null) {
     descTextarea.value = '';
     assigneeSelect.value = '';
   }
+}
+
+function filterAssignees() {
+  const query = document.getElementById('task_assignee_search').value.toLowerCase().trim();
+  const select = document.getElementById('task_assignee');
+  if (!select) return;
+  
+  const currentValue = select.value;
+  select.innerHTML = '';
+  
+  allAssigneeOptions.forEach(opt => {
+    if (opt.value === "" || opt.searchText.includes(query)) {
+      const optionEl = document.createElement('option');
+      optionEl.value = opt.value;
+      optionEl.textContent = opt.text;
+      select.appendChild(optionEl);
+    }
+  });
+  
+  // Re-select the previous value if it is still available in the filtered list
+  select.value = currentValue;
 }
 
 function closeTaskModal() {
