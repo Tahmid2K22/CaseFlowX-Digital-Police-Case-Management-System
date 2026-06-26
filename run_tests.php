@@ -869,6 +869,164 @@ assert_equals(1, (int)$stmt->fetchColumn(), "Notification should be generated fo
 // Cleanup
 $pdo->prepare("DELETE FROM cases WHERE id = ?")->execute([900]);
 
+// H. FIR Officer Citizen Complaint Response Tests (SCRUM-26)
+echo COLOR_CYAN . "=== Running FIR Officer Citizen Complaint Response Tests (SCRUM-26) ===" . COLOR_RESET . PHP_EOL;
+
+function simulate_respond_complaint($pdo, $user_role, $user_id, $username, $case_id, $action, $reason) {
+    $allowedRoles = ['Officer', 'FIR Officer', 'Supervisor', 'Admin'];
+    if (!in_array($user_role, $allowedRoles, true)) {
+        return ['success' => false, 'message' => 'Access denied. Only FIR Officers can respond to complaints.'];
+    }
+
+    if (!$case_id) {
+        return ['success' => false, 'message' => 'Invalid or missing case ID.'];
+    }
+
+    if (!in_array($action, ['accept', 'reject'], true)) {
+        return ['success' => false, 'message' => 'Invalid action. Must be accept or reject.'];
+    }
+
+    if ($action === 'reject' && trim($reason) === '') {
+        return ['success' => false, 'message' => 'Rejection reason is required.'];
+    }
+
+    $stmtCase = $pdo->prepare("SELECT * FROM cases WHERE id = ?");
+    $stmtCase->execute([$case_id]);
+    $case = $stmtCase->fetch();
+
+    if (!$case) {
+        return ['success' => false, 'message' => 'Complaint not found.'];
+    }
+
+    if ($case['officer_id'] !== null || !in_array($case['status'], ['open', 'Submitted'], true)) {
+        return ['success' => false, 'message' => 'This complaint has already been processed.'];
+    }
+
+    if ($action === 'accept') {
+        $stmtUpdate = $pdo->prepare("
+            UPDATE cases 
+            SET officer_id = ?, status = 'in_progress', modified_by = ?, modified_at = datetime('now')
+            WHERE id = ?
+        ");
+        $stmtUpdate->execute([$user_id, $user_id, $case_id]);
+
+        // Add timeline event
+        $pdo->prepare("
+            INSERT INTO case_timeline (case_id, event_type, title, description, created_by_name)
+            VALUES (?, 'status_change', 'Complaint Accepted', ?, ?)
+        ")->execute([$case_id, "Complaint accepted by FIR Officer: {$username}.", $username]);
+
+        // Citizen Notification
+        if (!empty($case['citizen_id'])) {
+            $notifTitle = "Complaint Accepted";
+            $notifMsg = "Your complaint '{$case['title']}' (#{$case['case_number']}) has been accepted and is now in progress.";
+            $pdo->prepare("INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)")
+                ->execute([$case['citizen_id'], $notifTitle, $notifMsg]);
+        }
+
+        return ['success' => true, 'message' => 'Complaint accepted and registered successfully.'];
+
+    } else {
+        $stmtUpdate = $pdo->prepare("
+            UPDATE cases 
+            SET officer_id = ?, status = 'Rejected', modified_by = ?, modified_at = datetime('now')
+            WHERE id = ?
+        ");
+        $stmtUpdate->execute([$user_id, $user_id, $case_id]);
+
+        // Add timeline event with rejection reason
+        $pdo->prepare("
+            INSERT INTO case_timeline (case_id, event_type, title, description, created_by_name)
+            VALUES (?, 'status_change', 'Complaint Rejected', ?, ?)
+        ")->execute([$case_id, "Complaint rejected by FIR Officer: {$username}. Reason: {$reason}", $username]);
+
+        // Citizen Notification
+        if (!empty($case['citizen_id'])) {
+            $notifTitle = "Complaint Rejected";
+            $notifMsg = "Your complaint '{$case['title']}' (#{$case['case_number']}) was rejected. Reason: {$reason}";
+            $pdo->prepare("INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)")
+                ->execute([$case['citizen_id'], $notifTitle, $notifMsg]);
+        }
+
+        return ['success' => true, 'message' => 'Complaint rejected successfully.'];
+    }
+}
+
+// 1. Authentication & Access Control Verification
+$res1 = simulate_respond_complaint($pdo, 'Citizen', 1, 'Citizen Tahmid', 1001, 'accept', '');
+assert_true(!$res1['success'], "Citizen role should be denied responding to complaints.");
+
+$res2 = simulate_respond_complaint($pdo, 'Investigator', 4, 'Investigator Salam', 1001, 'accept', '');
+assert_true(!$res2['success'], "Investigator role should be denied responding to complaints.");
+
+// 2. Input Validation Checks
+$res3 = simulate_respond_complaint($pdo, 'Officer', 3, 'Officer Mahbub', 0, 'accept', '');
+assert_true(!$res3['success'], "Missing or invalid case ID should return validation failure.");
+
+$res4 = simulate_respond_complaint($pdo, 'Officer', 3, 'Officer Mahbub', 1001, 'invalid_action', '');
+assert_true(!$res4['success'], "Invalid action type should return validation failure.");
+
+$res5 = simulate_respond_complaint($pdo, 'Officer', 3, 'Officer Mahbub', 1001, 'reject', '');
+assert_true(!$res5['success'], "Rejection without a reason should return validation failure.");
+
+// 3. Setup test complaints
+$pdo->prepare("INSERT INTO cases (id, citizen_id, case_number, title, description, status, priority) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    ->execute([1001, 1, 'CF-TEST-COMP-ACCEPT', 'Complaint Accept Test', 'Testing acceptance by officer', 'open', 'medium']);
+
+$pdo->prepare("INSERT INTO cases (id, citizen_id, case_number, title, description, status, priority) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    ->execute([1002, 1, 'CF-TEST-COMP-REJECT', 'Complaint Reject Test', 'Testing rejection by officer', 'open', 'high']);
+
+// 4. Test Successful Accept Action
+$resAccept = simulate_respond_complaint($pdo, 'Officer', 3, 'Officer Mahbub', 1001, 'accept', '');
+assert_true($resAccept['success'], "Officer should be allowed to accept complaint.");
+
+// Assert Case updates in DB
+$stmt = $pdo->prepare("SELECT status, officer_id FROM cases WHERE id = 1001");
+$stmt->execute();
+$cAccept = $stmt->fetch();
+assert_equals('in_progress', $cAccept['status'], "Accepted case status should update to in_progress.");
+assert_equals(3, (int)$cAccept['officer_id'], "Accepted case should be assigned to the officer's user ID.");
+
+// Assert Timeline logging
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM case_timeline WHERE case_id = 1001 AND event_type = 'status_change' AND title = 'Complaint Accepted'");
+$stmt->execute();
+assert_equals(1, (int)$stmt->fetchColumn(), "Case timeline event for Complaint Accepted should be logged.");
+
+// Assert Notification to Citizen
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = 1 AND title = 'Complaint Accepted'");
+$stmt->execute();
+assert_equals(1, (int)$stmt->fetchColumn(), "Citizen notification for accepted complaint should be created.");
+
+// 5. Test Successful Reject Action
+$resReject = simulate_respond_complaint($pdo, 'Officer', 3, 'Officer Mahbub', 1002, 'reject', 'Lack of evidence');
+assert_true($resReject['success'], "Officer should be allowed to reject complaint with a reason.");
+
+// Assert Case updates in DB
+$stmt = $pdo->prepare("SELECT status, officer_id FROM cases WHERE id = 1002");
+$stmt->execute();
+$cReject = $stmt->fetch();
+assert_equals('Rejected', $cReject['status'], "Rejected case status should update to Rejected.");
+assert_equals(3, (int)$cReject['officer_id'], "Rejected case should be assigned to the officer's user ID.");
+
+// Assert Timeline logging
+$stmt = $pdo->prepare("SELECT description FROM case_timeline WHERE case_id = 1002 AND event_type = 'status_change' AND title = 'Complaint Rejected'");
+$stmt->execute();
+$timelineDesc = $stmt->fetchColumn();
+assert_true(strpos($timelineDesc, 'Lack of evidence') !== false, "Rejection timeline event description should include the reason.");
+
+// Assert Notification to Citizen
+$stmt = $pdo->prepare("SELECT message FROM notifications WHERE user_id = 1 AND title = 'Complaint Rejected'");
+$stmt->execute();
+$notifMsg = $stmt->fetchColumn();
+assert_true(strpos($notifMsg, 'Lack of evidence') !== false, "Citizen notification for rejected complaint should include the reason.");
+
+// 6. Test Double Processing Prevention
+$resDouble = simulate_respond_complaint($pdo, 'Officer', 3, 'Officer Mahbub', 1001, 'accept', '');
+assert_true(!$resDouble['success'], "Double processing an already accepted complaint should be rejected.");
+
+// 7. Cleanup
+$pdo->prepare("DELETE FROM cases WHERE id IN (1001, 1002)")->execute();
+
 echo PHP_EOL;
 echo COLOR_CYAN . "=========================================================" . COLOR_RESET . PHP_EOL;
 echo COLOR_CYAN . "=== Test Run Summary                                  ===" . COLOR_RESET . PHP_EOL;
