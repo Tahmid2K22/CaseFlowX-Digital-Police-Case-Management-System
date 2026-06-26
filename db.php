@@ -62,4 +62,20 @@ function init_schema(PDO $pdo): void {
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_cases_citizen ON cases(citizen_id)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_cases_created ON cases(created_at)");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS emergencies (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            report_number   TEXT    NOT NULL UNIQUE,
+            type            TEXT    NOT NULL CHECK(type IN ('medical', 'fire', 'crime', 'accident', 'other')),
+            location        TEXT    NOT NULL,
+            description     TEXT    NOT NULL,
+            contact_info    TEXT,
+            status          TEXT    NOT NULL DEFAULT 'received' CHECK(status IN ('received', 'dispatched', 'resolved', 'spurious')),
+            created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+        )
+    ");
+
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_emergencies_number ON emergencies(report_number)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_emergencies_created ON emergencies(created_at)");
 }
