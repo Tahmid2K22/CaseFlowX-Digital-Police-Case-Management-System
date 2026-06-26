@@ -140,7 +140,7 @@ function priorityBadge(string $priority): string {
     </div>
 
     <!-- Stats Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
       <!-- Total Cases -->
       <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
         <div class="flex items-center justify-between">
@@ -207,6 +207,22 @@ function priorityBadge(string $priority): string {
         </div>
         <div class="mt-4 text-sm text-white/70 flex items-center gap-1">
           Start now <i class="ti ti-arrow-right"></i>
+        </div>
+      </a>
+
+      <!-- Emergency Quick Action -->
+      <a href="emergency.php" class="bg-gradient-to-br from-red-500 to-rose-600 rounded-2xl p-6 shadow-sm text-white hover:shadow-md transition group border border-red-100">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-white/80 text-sm font-medium">Emergency</p>
+            <p class="text-lg font-bold mt-1">Report Anonymously</p>
+          </div>
+          <div class="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center group-hover:scale-110 transition">
+            <i class="ti ti-alert-triangle text-2xl animate-pulse"></i>
+          </div>
+        </div>
+        <div class="mt-4 text-sm text-white/70 flex items-center gap-1">
+          Report now <i class="ti ti-arrow-right"></i>
         </div>
       </a>
     </div>

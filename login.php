@@ -121,9 +121,16 @@
         </button>
 
         <!-- Track status quick link -->
-        <div class="text-center">
+        <div class="text-center mb-2">
           <a href="track-status.php" class="inline-flex items-center gap-1.5 text-xs text-navy hover:text-accent font-semibold transition">
             <i class="ti ti-radar text-sm"></i> Track Complaint Status
+          </a>
+        </div>
+
+        <!-- Anonymous emergency report quick link -->
+        <div class="text-center">
+          <a href="emergency.php" class="inline-flex items-center gap-1.5 text-xs text-red-600 hover:text-red-700 font-bold transition">
+            <i class="ti ti-alert-triangle text-sm animate-pulse"></i> Report Emergency Anonymously
           </a>
         </div>
 
