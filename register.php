@@ -181,13 +181,18 @@ $cur = $t[$lang];
     <!-- Main Container -->
     <main class="flex-1 max-w-3xl w-full mx-auto p-4 md:p-6 space-y-6">
 
-        <!-- Breadcrumb -->
-        <div class="flex items-center gap-2 text-sm text-gray-500 justify-start">
-            <a href="admin_users.php" class="hover:text-accent transition-colors flex items-center gap-1 font-semibold">
-                <i class="ti ti-users text-base"></i> <?php echo $lang === 'bn' ? 'ব্যবহারকারী ডিরেক্টরি' : 'User Directory'; ?>
-            </a>
-            <i class="ti ti-chevron-right text-xs"></i>
-            <span class="text-gray-700 font-bold"><?php echo $cur['heading']; ?></span>
+        <!-- Breadcrumb & Back -->
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 text-sm text-gray-500 justify-start">
+                <a href="admin_users.php" class="hover:text-accent transition-colors flex items-center gap-1 font-semibold">
+                    <i class="ti ti-users text-base"></i> <?php echo $lang === 'bn' ? 'ব্যবহারকারী ডিরেক্টরি' : 'User Directory'; ?>
+                </a>
+                <i class="ti ti-chevron-right text-xs"></i>
+                <span class="text-gray-700 font-bold"><?php echo $cur['heading']; ?></span>
+            </div>
+            <button onclick="history.back()" class="text-gray-500 hover:text-navy transition-colors flex items-center gap-1 text-xs font-semibold border border-slate-200 px-2.5 py-1 rounded-xl bg-slate-50 hover:bg-slate-100 transition shadow-sm">
+                <i class="ti ti-arrow-left"></i> <?php echo $lang === 'bn' ? 'ফিরে যান' : 'Back'; ?>
+            </button>
         </div>
 
         <!-- Registration Card -->

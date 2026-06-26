@@ -33,13 +33,18 @@
   <div class="flex-grow">
     <div class="min-h-screen bg-[#F4F6F9] py-10 px-4">
 
-  <!-- Breadcrumb -->
-  <div class="max-w-3xl mx-auto mb-5 flex items-center gap-2 text-sm text-gray-500">
-    <a href="index.php" class="hover:text-accent transition-colors flex items-center gap-1">
-      <i class="ti ti-home text-base"></i> Home
-    </a>
-    <i class="ti ti-chevron-right text-xs"></i>
-    <span class="text-gray-700 font-medium">Officer Registration</span>
+  <!-- Breadcrumb & Back -->
+  <div class="max-w-3xl mx-auto mb-5 flex items-center justify-between">
+    <div class="flex items-center gap-2 text-sm text-gray-500">
+      <a href="index.php" class="hover:text-accent transition-colors flex items-center gap-1">
+        <i class="ti ti-home text-base"></i> Home
+      </a>
+      <i class="ti ti-chevron-right text-xs"></i>
+      <span class="text-gray-700 font-medium">Officer Registration</span>
+    </div>
+    <button onclick="history.back()" class="text-gray-500 hover:text-navy transition-colors flex items-center gap-1 text-xs font-semibold border border-slate-200 px-2.5 py-1 rounded-xl bg-slate-50 hover:bg-slate-100 transition shadow-sm">
+      <i class="ti ti-arrow-left"></i> Back
+    </button>
   </div>
 
   <!-- Card -->

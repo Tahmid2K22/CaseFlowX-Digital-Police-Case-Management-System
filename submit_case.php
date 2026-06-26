@@ -7,6 +7,7 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+date_default_timezone_set('Asia/Dhaka');
 
 if (empty($_SESSION['logged_in']) || empty($_SESSION['citizen_id'])) {
     header('Location: login.php');
@@ -70,6 +71,16 @@ try {
     ");
     $citizenStmt->execute([':id' => $citizenId]);
     $citizen = $citizenStmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$citizen) {
+        // Fallback: fetch from users table
+        $userStmt = $db->prepare("
+            SELECT full_name, national_id, phone, address, district, division
+            FROM users WHERE id = :id AND role = 'Citizen'
+        ");
+        $userStmt->execute([':id' => $citizenId]);
+        $citizen = $userStmt->fetch(PDO::FETCH_ASSOC);
+    }
 
     if (!$citizen) {
         json_exit(false, 'Citizen record not found.');
@@ -146,7 +157,7 @@ try {
         ':complainant_phone'    => $citizen['phone'],
         ':complainant_address'  => $complainantAddress,
         ':incident_date'        => date('Y-m-d'),
-        ':incident_time'        => null,
+        ':incident_time'        => date('h:i A'),
         ':incident_location'    => $title,
         ':incident_description' => $title . "\n\n" . $description,
         ':sections_applied'     => null,
