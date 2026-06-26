@@ -8,7 +8,7 @@ $t = [
     'en' => [
         'title' => 'Access Denied — CaseFlowX',
         'heading' => 'Access Denied',
-        'desc' => 'You do not have the required permissions to view this resource. This area is restricted to Administrators only.',
+        'desc' => 'You do not have the required permissions to view this resource.',
         'logged_as' => 'You are currently logged in as',
         'logout_btn' => 'Log Out & Try Different Account',
         'back_home' => 'Back to Home',
@@ -17,7 +17,7 @@ $t = [
     'bn' => [
         'title' => 'অনুমতি নেই — কেসফ্লোএক্স',
         'heading' => 'প্রবেশাধিকার অস্বীকৃত',
-        'desc' => 'এই রিসোর্সটি দেখার জন্য আপনার প্রয়োজনীয় অনুমতি নেই। এই এলাকাটি শুধুমাত্র প্রশাসকদের (Admin) জন্য সংরক্ষিত।',
+        'desc' => 'এই রিসোর্সটি দেখার জন্য আপনার প্রয়োজনীয় অনুমতি নেই।',
         'logged_as' => 'আপনি বর্তমানে লগ ইন আছেন',
         'logout_btn' => 'লগআউট এবং অন্য অ্যাকাউন্ট চেষ্টা করুন',
         'back_home' => 'হোমে ফিরে যান',
@@ -26,6 +26,27 @@ $t = [
 ];
 
 $cur = $t[$lang];
+
+$desc = $cur['desc'];
+if (isset($_GET['msg']) && trim($_GET['msg']) !== '') {
+    $desc = htmlspecialchars(trim($_GET['msg']));
+}
+
+$homeUrl = 'index.php';
+if (is_logged_in() || !empty($_SESSION['officer_id']) || !empty($_SESSION['citizen_id'])) {
+    $sessionRole = $_SESSION['role'] ?? '';
+    $officerId = $_SESSION['officer_id'] ?? 0;
+    $citizenId = $_SESSION['citizen_id'] ?? 0;
+    if ($officerId > 0 || $sessionRole === 'Officer') {
+        $homeUrl = ($sessionRole === 'Officer') ? 'fir_officer_dashboard.php' : 'officer-dashboard.php';
+    } elseif ($sessionRole === 'Admin') {
+        $homeUrl = 'admin_firs.php';
+    } elseif ($sessionRole === 'Investigator') {
+        $homeUrl = 'investigator_dashboard.php';
+    } elseif ($sessionRole === 'Citizen' || $citizenId > 0) {
+        $homeUrl = 'cases.php';
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="<?php echo $lang; ?>">
@@ -85,7 +106,7 @@ $cur = $t[$lang];
             </h1>
             
             <p class="text-slate-600 mb-6 leading-relaxed">
-                <?php echo $cur['desc']; ?>
+                <?php echo $desc; ?>
             </p>
 
             <?php if (is_logged_in()): ?>
@@ -110,7 +131,7 @@ $cur = $t[$lang];
                     <?php echo $cur['logout_btn']; ?>
                 </a>
                 
-                <a href="home.html"
+                <a href="<?php echo htmlspecialchars($homeUrl); ?>"
                    class="bg-navy hover:bg-navy2 text-white font-bold py-2.5 px-4 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 text-sm">
                     <i class="ti ti-home"></i>
                     <?php echo $cur['back_home']; ?>

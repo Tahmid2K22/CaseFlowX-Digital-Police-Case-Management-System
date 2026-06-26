@@ -8,21 +8,64 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-if (empty($_SESSION['logged_in']) || empty($_SESSION['citizen_id'])) {
+if (empty($_SESSION['logged_in']) || (empty($_SESSION['user_id']) && empty($_SESSION['officer_id']) && empty($_SESSION['citizen_id']))) {
     header('Location: login.php');
     exit;
 }
 
 require_once __DIR__ . '/db.php';
 
+$role = $_SESSION['role'] ?? '';
+$citizenId = $_SESSION['citizen_id'] ?? 0;
+$officerId = $_SESSION['officer_id'] ?? 0;
+$userId = $_SESSION['user_id'] ?? 0;
+
+if (empty($role) && !empty($officerId)) {
+    $role = $_SESSION['officer_role'] ?? 'Officer';
+}
+
 $db = get_db();
-$stmt = $db->prepare('
-    SELECT * FROM cases
-    WHERE citizen_id = :citizen_id
-    ORDER BY created_at DESC
-');
-$stmt->execute([':citizen_id' => $_SESSION['citizen_id']]);
+
+if ($role === 'Admin' || $role === 'Officer' || $role === 'FIR Officer' || $role === 'Supervisor') {
+    $stmt = $db->prepare('
+        SELECT * FROM cases
+        ORDER BY created_at DESC
+    ');
+    $stmt->execute();
+} elseif ($role === 'Investigator') {
+    $stmt = $db->prepare('
+        SELECT * FROM cases
+        WHERE investigator_id = :inv_id
+        ORDER BY created_at DESC
+    ');
+    $stmt->execute([':inv_id' => $userId]);
+} else {
+    $stmt = $db->prepare('
+        SELECT * FROM cases
+        WHERE citizen_id = :citizen_id
+        ORDER BY created_at DESC
+    ');
+    $stmt->execute([':citizen_id' => $citizenId]);
+}
 $cases = $stmt->fetchAll();
+
+$dashboardUrl = 'dashboard.php';
+$pageTitle = 'My Cases';
+$pageSub = 'View and track all your filed complaints.';
+
+if ($role === 'Officer' || $role === 'FIR Officer' || $role === 'Supervisor') {
+    $dashboardUrl = 'fir_officer_dashboard.php';
+    $pageTitle = 'All FIR Cases';
+    $pageSub = 'Manage and register citizen-submitted complaints.';
+} elseif ($role === 'Investigator') {
+    $dashboardUrl = 'investigator_dashboard.php';
+    $pageTitle = 'Assigned Cases';
+    $pageSub = 'Manage your assigned investigation cases.';
+} elseif ($role === 'Admin') {
+    $dashboardUrl = 'admin_users.php';
+    $pageTitle = 'All FIR Cases';
+    $pageSub = 'Manage and register citizen-submitted complaints.';
+}
 
 function statusBadge(string $status): string {
     $colors = [
@@ -85,15 +128,31 @@ function priorityBadge(string $priority): string {
 <body class="bg-[#F4F6F9] min-h-screen flex flex-col justify-between">
   <div class="flex-grow">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Breadcrumb & Back -->
+    <div class="mb-5 flex items-center justify-between">
+      <div class="flex items-center gap-2 text-sm text-gray-500">
+        <a href="<?= htmlspecialchars($dashboardUrl) ?>" class="hover:text-accent transition-colors flex items-center gap-1 font-semibold">
+          <i class="ti ti-home text-base"></i> Dashboard
+        </a>
+        <i class="ti ti-chevron-right text-xs"></i>
+        <span class="text-gray-700 font-bold"><?= htmlspecialchars($pageTitle) ?></span>
+      </div>
+      <button onclick="history.back()" class="text-gray-500 hover:text-navy transition-colors flex items-center gap-1 text-xs font-semibold border border-slate-200 px-2.5 py-1 rounded-xl bg-slate-50 hover:bg-slate-100 transition shadow-sm">
+        <i class="ti ti-arrow-left"></i> Back
+      </button>
+    </div>
+
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
       <div>
-        <h1 class="text-2xl font-bold text-navy">My Cases</h1>
-        <p class="text-gray-500 mt-1">View and track all your filed complaints.</p>
+        <h1 class="text-2xl font-bold text-navy"><?= htmlspecialchars($pageTitle) ?></h1>
+        <p class="text-gray-500 mt-1"><?= htmlspecialchars($pageSub) ?></p>
       </div>
+      <?php if ($role === 'Citizen' || empty($role)): ?>
       <a href="new-case.php" class="inline-flex items-center gap-2 bg-accent hover:bg-accent-dark text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition">
         <i class="ti ti-plus text-base"></i> New Case
       </a>
+      <?php endif; ?>
     </div>
 
     <!-- Cases Table -->

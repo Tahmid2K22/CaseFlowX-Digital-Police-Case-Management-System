@@ -26,14 +26,14 @@ if (!$caseId) {
 $officer = null;
 $citizen = null;
 
-if (!empty($_SESSION['officer_id'])) {
-    $officer = require_officer();
-} elseif (($_SESSION['role'] ?? '') === 'Officer') {
+if (($_SESSION['role'] ?? '') === 'Officer') {
     $officer = [
         'id' => $_SESSION['user_id'],
         'full_name' => $_SESSION['username'] ?? 'Officer',
         'role' => 'Officer'
     ];
+} elseif (!empty($_SESSION['officer_id'])) {
+    $officer = require_officer();
 } elseif (!empty($_SESSION['citizen_id'])) {
     $citizen = require_citizen();
 }
@@ -87,9 +87,11 @@ try {
         }
     } elseif ($officer) {
         $allowed = true;
+        $role = $_SESSION['officer_role'] ?? 'Officer';
     } elseif ($citizen) {
         if ($case['citizen_id'] == $citizen['id']) {
             $allowed = true;
+            $role = 'Citizen';
         }
     }
 
@@ -97,6 +99,29 @@ try {
         header('Location: unauthorized.php');
         exit;
     }
+
+    // Resolve exact user details and roles for UI segments access control
+    $currentUserRole = $role;
+    $currentUserId = 0;
+    if (!empty($_SESSION['officer_id'])) {
+        $currentUserId = (int)$_SESSION['officer_id'];
+    } elseif (!empty($_SESSION['user_id'])) {
+        $currentUserId = (int)$_SESSION['user_id'];
+    } elseif (!empty($_SESSION['citizen_id'])) {
+        $currentUserId = (int)$_SESSION['citizen_id'];
+    }
+
+    // Access check: Admins, Officers, FIR Officers, Supervisors, and the assigned Investigator
+    $hasFullInvestigationAccess = false;
+    if ($currentUserRole === 'Admin' || $currentUserRole === 'Officer' || $currentUserRole === 'FIR Officer' || $currentUserRole === 'Supervisor') {
+        $hasFullInvestigationAccess = true;
+    } elseif ($currentUserRole === 'Investigator') {
+        if ((int)$case['investigator_id'] === $currentUserId) {
+            $hasFullInvestigationAccess = true;
+        }
+    }
+
+    $canUploadEvidence = $hasFullInvestigationAccess;
 
     // Fetch evidence files
     $evStmt = $db->prepare("SELECT * FROM fir_evidence WHERE case_id = ?");
@@ -166,11 +191,6 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
         <h1 class="text-lg font-bold leading-none">Case Details</h1>
         <p class="text-[11px] text-white/50 mt-0.5"><?= htmlspecialchars($case['case_number']) ?> <?php if(!empty($case['fir_number'])) echo "· " . htmlspecialchars($case['fir_number']); ?></p>
       </div>
-    </div>
-    <div class="flex items-center gap-4">
-      <a href="<?= $backUrl ?>" class="text-white/70 hover:text-white transition text-xs font-semibold flex items-center gap-1">
-        <i class="ti ti-arrow-back"></i> Back
-      </a>
     </div>
   </div>
 </header>
@@ -308,7 +328,20 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
           </div>
           <div>
             <span class="text-xs text-gray-400 font-semibold block">Incident Time</span>
-            <span class="text-gray-800 font-medium"><?= htmlspecialchars($case['incident_time'] ?? '—') ?></span>
+            <span class="text-gray-800 font-medium"><?php
+              $dispTime = '—';
+              if (!empty($case['incident_time'])) {
+                  if (!empty($case['incident_date'])) {
+                      $dispTime = date('F d, Y', strtotime($case['incident_date'])) . ' at ' . htmlspecialchars($case['incident_time']);
+                  } else {
+                      $dispTime = htmlspecialchars($case['incident_time']);
+                  }
+              } elseif (!empty($case['created_at'])) {
+                  date_default_timezone_set('Asia/Dhaka');
+                  $dispTime = date('F d, Y \a\t h:i A', strtotime($case['created_at'] . ' UTC'));
+              }
+              echo $dispTime;
+            ?></span>
           </div>
           <div class="sm:col-span-2">
             <span class="text-xs text-gray-400 font-semibold block">Incident Location</span>
@@ -424,14 +457,6 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
         </div>
 
         <?php
-          $canUploadEvidence = false;
-          if ($role === 'Admin' || $role === 'Officer') {
-              $canUploadEvidence = true;
-          } elseif ($role === 'Investigator' && (int)$case['investigator_id'] === (int)$_SESSION['user_id']) {
-              $canUploadEvidence = true;
-          } elseif (!empty($_SESSION['officer_id'])) {
-              $canUploadEvidence = true;
-          }
           if ($canUploadEvidence):
         ?>
           <div class="mt-6 pt-6 border-t border-gray-100">
@@ -473,14 +498,7 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
             <i class="ti ti-users text-accent"></i> Suspect Profiles
           </h2>
           <?php
-            $canAddSuspect = false;
-            if ($role === 'Admin' || $role === 'Officer') {
-                $canAddSuspect = true;
-            } elseif ($role === 'Investigator' && (int)$case['investigator_id'] === (int)$_SESSION['user_id']) {
-                $canAddSuspect = true;
-            } elseif (!empty($_SESSION['officer_id'])) {
-                $canAddSuspect = true;
-            }
+            $canAddSuspect = $hasFullInvestigationAccess;
             if ($canAddSuspect):
           ?>
             <button onclick="openSuspectModal()" class="bg-accent hover:bg-accent-dark text-white px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition shadow-sm">
@@ -510,8 +528,7 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
             <i class="ti ti-layout-board text-accent"></i> Case Task Board
           </h2>
           <?php
-            $isInvestigatorOrOfficer = ($role === 'Admin' || $role === 'Officer' || $role === 'Investigator' || !empty($_SESSION['officer_id']));
-            if ($isInvestigatorOrOfficer):
+            if ($hasFullInvestigationAccess):
           ?>
             <button onclick="openTaskModal()" class="bg-accent hover:bg-accent-dark text-white px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition shadow-sm">
               <i class="ti ti-plus text-sm"></i> Add Task
@@ -542,14 +559,7 @@ $isUnassigned = $officer && ($case['officer_id'] === null);
 
         <!-- Add Progress Update Form (Admins, Officers, and Assigned Investigators only) -->
         <?php 
-          $canAddEvent = false;
-          if ($role === 'Admin' || $role === 'Officer') {
-              $canAddEvent = true;
-          } elseif ($role === 'Investigator' && (int)$case['investigator_id'] === (int)$_SESSION['user_id']) {
-              $canAddEvent = true;
-          } elseif ($officer) {
-              $canAddEvent = true;
-          }
+          $canAddEvent = $hasFullInvestigationAccess;
           if ($canAddEvent):
         ?>
           <div class="border-t border-slate-100 pt-5 mt-5">
