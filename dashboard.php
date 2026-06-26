@@ -1,7 +1,7 @@
 <?php
 /**
  * dashboard.php — CaseFlowX Citizen Dashboard
- * Main dashboard for logged-in citizens.
+ * Premium dashboard for logged-in citizens matching the FIR Officer dashboard style.
  */
 
 // Start session and check authentication
@@ -16,335 +16,476 @@ if (empty($_SESSION['logged_in']) || empty($_SESSION['citizen_id'])) {
 
 require_once __DIR__ . '/db.php';
 
-// Fetch citizen details
-$db = get_db();
-$stmt = $db->prepare('SELECT * FROM users WHERE id = :id AND role = "Citizen" LIMIT 1');
-$stmt->execute([':id' => $_SESSION['citizen_id']]);
-$citizen = $stmt->fetch();
+$lang = $_SESSION['lang'] ?? 'en';
+$citizenName = $_SESSION['citizen_name'] ?? 'Citizen';
+$citizenPhone = '';
+$citizenNID = '';
+$citizenDivision = '';
+$citizenDistrict = '';
+$citizenEmail = '';
+$citizenCreatedAt = '';
 
-if (!$citizen) {
-    // Invalid session, logout
-    session_destroy();
-    header('Location: login.php');
-    exit;
+// Fetch citizen details
+try {
+    $db = get_db();
+    
+    // Attempt load from citizens table
+    $stmt = $db->prepare('SELECT * FROM citizens WHERE id = :id LIMIT 1');
+    $stmt->execute([':id' => $_SESSION['citizen_id']]);
+    $citizen = $stmt->fetch();
+    
+    if (!$citizen) {
+        // Fallback: check users table
+        $stmt = $db->prepare('SELECT * FROM users WHERE id = :id AND role = "Citizen" LIMIT 1');
+        $stmt->execute([':id' => $_SESSION['citizen_id']]);
+        $citizen = $stmt->fetch();
+    }
+
+    if (!$citizen) {
+        // Invalid session, logout
+        session_destroy();
+        header('Location: login.php');
+        exit;
+    }
+
+    $citizenName      = $citizen['full_name'];
+    $citizenPhone     = $citizen['phone'];
+    $citizenNID       = $citizen['national_id'];
+    $citizenDivision  = $citizen['division'];
+    $citizenDistrict  = $citizen['district'];
+    $citizenEmail     = $citizen['email'] ?? '';
+    $citizenCreatedAt = $citizen['created_at'];
+
+} catch (PDOException $e) {
+    error_log('[CaseFlowX] Citizen dashboard details load error: ' . $e->getMessage());
 }
 
 // Fetch real dashboard data
-$stmt = $db->prepare('
-    SELECT * FROM cases
-    WHERE citizen_id = :citizen_id
-    ORDER BY created_at DESC
-    LIMIT 5
-');
-$stmt->execute([':citizen_id' => $_SESSION['citizen_id']]);
-$recentCases = $stmt->fetchAll();
+$recentCases = [];
+$totalCases = 0;
+$openCases = 0;
+$resolvedCases = 0;
 
-// Stats counts
-$totalStmt = $db->prepare('SELECT COUNT(*) FROM cases WHERE citizen_id = :citizen_id');
-$totalStmt->execute([':citizen_id' => $_SESSION['citizen_id']]);
-$totalCases = (int) $totalStmt->fetchColumn();
+try {
+    $checkTable = $db->query("SELECT name FROM sqlite_master WHERE type='table' AND name='cases'")->fetchColumn();
+    if ($checkTable) {
+        // Fetch recent cases
+        $stmt = $db->prepare('
+            SELECT * FROM cases
+            WHERE citizen_id = :citizen_id
+            ORDER BY created_at DESC
+            LIMIT 5
+        ');
+        $stmt->execute([':citizen_id' => $_SESSION['citizen_id']]);
+        $recentCases = $stmt->fetchAll();
 
-$openStmt = $db->prepare("SELECT COUNT(*) FROM cases WHERE citizen_id = :citizen_id AND status = 'open'");
-$openStmt->execute([':citizen_id' => $_SESSION['citizen_id']]);
-$openCases = (int) $openStmt->fetchColumn();
+        // Stats counts
+        $totalStmt = $db->prepare('SELECT COUNT(*) FROM cases WHERE citizen_id = :citizen_id');
+        $totalStmt->execute([':citizen_id' => $_SESSION['citizen_id']]);
+        $totalCases = (int) $totalStmt->fetchColumn();
 
-$resolvedStmt = $db->prepare("SELECT COUNT(*) FROM cases WHERE citizen_id = :citizen_id AND status = 'resolved'");
-$resolvedStmt->execute([':citizen_id' => $_SESSION['citizen_id']]);
-$resolvedCases = (int) $resolvedStmt->fetchColumn();
+        $openStmt = $db->prepare("SELECT COUNT(*) FROM cases WHERE citizen_id = :citizen_id AND status IN ('open', 'Submitted')");
+        $openStmt->execute([':citizen_id' => $_SESSION['citizen_id']]);
+        $openCases = (int) $openStmt->fetchColumn();
 
-// Helper for status badges
+        $resolvedStmt = $db->prepare("SELECT COUNT(*) FROM cases WHERE citizen_id = :citizen_id AND status = 'resolved'");
+        $resolvedStmt->execute([':citizen_id' => $_SESSION['citizen_id']]);
+        $resolvedCases = (int) $resolvedStmt->fetchColumn();
+    }
+} catch (PDOException $e) {
+    error_log('[CaseFlowX] Case query error: ' . $e->getMessage());
+}
+
+$nameParts = array_slice(explode(' ', $citizenName), 0, 2);
+$initials  = strtoupper(implode('', array_map(fn($w) => $w[0], $nameParts)));
+
 function statusBadge(string $status): string {
     $colors = [
-        'open' => 'bg-blue-100 text-blue-700 border-blue-200',
-        'in_progress' => 'bg-yellow-100 text-yellow-700 border-yellow-200',
-        'resolved' => 'bg-green-100 text-green-700 border-green-200',
-        'closed' => 'bg-gray-100 text-gray-600 border-gray-200',
+        'open'        => 'bg-blue-50 text-blue-600 border-blue-100',
+        'Submitted'   => 'bg-blue-50 text-blue-600 border-blue-100',
+        'in_progress' => 'bg-purple-50 text-purple-600 border-purple-100',
+        'resolved'    => 'bg-green-50 text-green-600 border-green-100',
+        'closed'      => 'bg-gray-100 text-gray-500 border-gray-200',
+        'Registered'  => 'bg-green-50 text-green-600 border-green-100',
+        'Rejected'    => 'bg-red-50 text-red-600 border-red-100'
     ];
     $icons = [
-        'open' => 'ti-circle-dot',
+        'open'        => 'ti-circle-dot',
+        'Submitted'   => 'ti-circle-dot',
         'in_progress' => 'ti-loader',
-        'resolved' => 'ti-check-circle',
-        'closed' => 'ti-x',
+        'resolved'    => 'ti-check-circle',
+        'closed'      => 'ti-x',
+        'Registered'  => 'ti-check-circle',
+        'Rejected'    => 'ti-x'
     ];
-    $labels = [
-        'open' => 'Open',
-        'in_progress' => 'In Progress',
-        'resolved' => 'Resolved',
-        'closed' => 'Closed',
-    ];
-    $cls = $colors[$status] ?? $colors['open'];
-    $ico = $icons[$status] ?? $icons['open'];
-    $lbl = $labels[$status] ?? ucfirst($status);
-    return "<span class=\"inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border {$cls}\">
-            <i class=\"ti {$ico}\"></i> {$lbl}
+    $cls = $colors[$status] ?? 'bg-gray-100 text-gray-500 border-gray-200';
+    $ico = $icons[$status] ?? 'ti-circle-dot';
+    return "<span class=\"inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border {$cls}\">
+            <i class=\"ti {$ico}\"></i> " . ucfirst($status) . "
           </span>";
 }
 
 function priorityBadge(string $priority): string {
     $colors = [
-        'low' => 'text-gray-500',
-        'medium' => 'text-orange-500',
-        'high' => 'text-red-500',
+        'low'    => 'bg-gray-100 text-gray-600 border-gray-200',
+        'medium' => 'bg-orange-50 text-orange-700 border-orange-200',
+        'high'   => 'bg-red-50 text-red-700 border-red-200',
     ];
     $cls = $colors[$priority] ?? $colors['low'];
-    return "<span class=\"text-xs font-medium {$cls}\">" . ucfirst($priority) . "</span>";
+    return "<span class=\"inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold border {$cls}\">" . ucfirst($priority) . "</span>";
 }
 ?>
-<!-- ═══════════════════════════════════════════════════════════════════════════
-     CaseFlowX — Citizen Dashboard
-     Tailwind CSS via CDN · Tabler Icons
-     ═══════════════════════════════════════════════════════════════════════════ -->
-
-<!-- Tailwind + Tabler -->
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<?php echo $lang; ?>">
 <head>
-  <meta charset="UTF-8">
-  <title>Citizen Dashboard — CaseFlowX</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            navy:   '#1B2A4A',
-            accent: '#1D9E75',
-            'accent-dark': '#0F6E56',
-          }
-        }
-      }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Citizen Dashboard - CaseFlowX</title>
+<meta name="description" content="Secure Citizen portal on CaseFlowX - file complaints and track status efficiently.">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        navy: '#1B2A4A', navyDark: '#141f36', navy2: '#253554',
+        accent: '#1D9E75', 'accent-dark': '#0F6E56', 'accent-light': '#E8F8F3',
+      },
+      fontFamily: { sans: ['Inter','Segoe UI','sans-serif'] },
     }
-  </script>
+  }
+}
+</script>
+<style>
+body { font-family:'Inter',sans-serif; background:#F0F4F8; }
+.sidebar-link {
+  display:flex; align-items:center; gap:10px; padding:10px 16px;
+  border-radius:10px; font-size:14px; font-weight:500;
+  color:rgba(255,255,255,0.70); transition:all 0.2s ease; text-decoration:none;
+}
+.sidebar-link:hover { background:rgba(255,255,255,0.08); color:#fff; }
+.sidebar-link.active {
+  background:rgba(29,158,117,0.25); color:#1D9E75; border-left:3px solid #1D9E75;
+}
+.stat-card {
+  border-radius:16px; padding:24px; transition:transform 0.2s,box-shadow 0.2s;
+}
+.stat-card:hover { transform:translateY(-3px); box-shadow:0 12px 32px rgba(0,0,0,0.12); }
+.badge { display:inline-flex; align-items:center; padding:3px 10px;
+  border-radius:999px; font-size:11px; font-weight:600; }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+@keyframes slideUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+.animate-fade-in { animation:fadeIn 0.4s ease-out; }
+.animate-slide-up { animation:slideUp 0.5s ease-out; }
+@keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.4)} }
+.pulse-dot { animation:pulse-dot 2s infinite; }
+::-webkit-scrollbar { width:6px; }
+::-webkit-scrollbar-thumb { background:#CBD5E1; border-radius:4px; }
+</style>
 </head>
-<body class="bg-[#F4F6F9] min-h-screen flex flex-col justify-between">
-  <div class="flex-grow">
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<body class="h-screen flex overflow-hidden">
 
-    <!-- Welcome Section -->
-    <div class="mb-8">
-      <h1 class="text-2xl font-bold text-navy">Welcome back, <?= htmlspecialchars(explode(' ', $citizen['full_name'])[0]) ?>!</h1>
-      <p class="text-gray-500 mt-1">Manage your cases and track their progress from your personal dashboard.</p>
+<!-- SIDEBAR -->
+<aside class="w-64 h-screen sticky top-0 bg-navyDark flex flex-col flex-shrink-0 shadow-xl overflow-y-auto" id="sidebar">
+
+  <div class="px-6 py-5 border-b border-white/10 flex items-center gap-3">
+    <div class="w-9 h-9 rounded-xl bg-accent flex items-center justify-center text-white shadow-lg">
+      <i class="ti ti-user text-lg"></i>
     </div>
-
-    <!-- Stats Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-      <!-- Total Cases -->
-      <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-gray-500 text-sm font-medium">Total Cases</p>
-            <p class="text-3xl font-bold text-navy mt-1"><?= $totalCases ?></p>
-          </div>
-          <div class="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
-            <i class="ti ti-folders text-2xl"></i>
-          </div>
-        </div>
-        <div class="mt-4 flex items-center gap-2 text-sm">
-          <span class="text-accent font-medium flex items-center gap-1">
-            <i class="ti ti-folder"></i> All your
-          </span>
-          <span class="text-gray-400">filed complaints</span>
-        </div>
-      </div>
-
-      <!-- Open Cases -->
-      <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-gray-500 text-sm font-medium">Open Cases</p>
-            <p class="text-3xl font-bold text-navy mt-1"><?= $openCases ?></p>
-          </div>
-          <div class="w-12 h-12 rounded-xl bg-yellow-50 flex items-center justify-center text-yellow-600">
-            <i class="ti ti-clock text-2xl"></i>
-          </div>
-        </div>
-        <div class="mt-4 flex items-center gap-2 text-sm">
-          <span class="text-yellow-600 font-medium">Awaiting response</span>
-        </div>
-      </div>
-
-      <!-- Resolved -->
-      <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-gray-500 text-sm font-medium">Resolved</p>
-            <p class="text-3xl font-bold text-navy mt-1"><?= $resolvedCases ?></p>
-          </div>
-          <div class="w-12 h-12 rounded-xl bg-green-50 flex items-center justify-center text-green-600">
-            <i class="ti ti-circle-check text-2xl"></i>
-          </div>
-        </div>
-        <div class="mt-4 flex items-center gap-2 text-sm">
-          <span class="text-green-600 font-medium flex items-center gap-1">
-            <i class="ti ti-check"></i> Completed
-          </span>
-        </div>
-      </div>
-
-      <!-- Quick Action -->
-      <a href="new-case.php" class="bg-gradient-to-br from-accent to-accent-dark rounded-2xl p-6 shadow-sm text-white hover:shadow-md transition group">
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-white/80 text-sm font-medium">New Case</p>
-            <p class="text-lg font-bold mt-1">File Complaint</p>
-          </div>
-          <div class="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center group-hover:scale-110 transition">
-            <i class="ti ti-plus text-2xl"></i>
-          </div>
-        </div>
-        <div class="mt-4 text-sm text-white/70 flex items-center gap-1">
-          Start now <i class="ti ti-arrow-right"></i>
-        </div>
-      </a>
+    <div>
+      <span class="text-white font-bold text-base tracking-tight">CaseFlowX</span>
+      <p class="text-white/40 text-[10px] font-medium tracking-wider uppercase">Citizen Portal</p>
     </div>
-
-    <!-- Recent Cases Table -->
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-8">
-      <div class="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
-        <h2 class="text-navy font-semibold text-lg flex items-center gap-2">
-          <i class="ti ti-list-details text-accent"></i> Recent Cases
-        </h2>
-        <a href="cases.php" class="text-accent text-sm font-medium hover:underline flex items-center gap-1">
-          View All <i class="ti ti-arrow-right text-xs"></i>
-        </a>
-      </div>
-
-      <div class="overflow-x-auto">
-        <table class="w-full">
-          <thead class="bg-[#f8f9fc]">
-            <tr>
-              <th class="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Case ID</th>
-              <th class="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Title</th>
-              <th class="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-              <th class="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Priority</th>
-              <th class="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Date</th>
-              <th class="px-6 py-3.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Action</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            <?php foreach ($recentCases as $case): ?>
-            <tr class="hover:bg-gray-50/50 transition">
-              <td class="px-6 py-4 text-sm font-medium text-navy"><?= htmlspecialchars($case['case_number']) ?></td>
-              <td class="px-6 py-4 text-sm text-gray-600"><?= htmlspecialchars($case['title']) ?></td>
-              <td class="px-6 py-4"><?= statusBadge($case['status']) ?></td>
-              <td class="px-6 py-4"><?= priorityBadge($case['priority']) ?></td>
-              <td class="px-6 py-4 text-sm text-gray-500"><?= date('M d, Y', strtotime($case['created_at'])) ?></td>
-              <td class="px-6 py-4 text-right">
-                <a href="case-details.php?id=<?= (int)$case['id'] ?>" class="text-accent hover:text-accent-dark font-medium text-sm flex items-center gap-1 justify-end">
-                  View <i class="ti ti-external-link text-xs"></i>
-                </a>
-              </td>
-            </tr>
-            <?php endforeach; ?>
-            <?php if (empty($recentCases)): ?>
-            <tr>
-              <td colspan="6" class="px-6 py-12 text-center text-gray-500">
-                <div class="flex flex-col items-center gap-3">
-                  <div class="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-gray-300">
-                    <i class="ti ti-inbox text-3xl"></i>
-                  </div>
-                  <p>No cases yet. <a href="new-case.php" class="text-accent hover:underline">File your first complaint</a>.</p>
-                </div>
-              </td>
-            </tr>
-            <?php endif; ?>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Two Column Layout -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <!-- Profile Summary -->
-      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <h2 class="text-navy font-semibold text-lg mb-5 flex items-center gap-2">
-          <i class="ti ti-user-circle text-accent"></i> Profile
-        </h2>
-        
-        <div class="flex items-center gap-4 mb-6">
-          <div class="w-16 h-16 rounded-2xl bg-accent text-white flex items-center justify-center text-2xl font-bold">
-            <?= strtoupper(substr($citizen['full_name'], 0, 1)) ?>
-          </div>
-          <div>
-            <p class="font-semibold text-navy"><?= htmlspecialchars($citizen['full_name']) ?></p>
-            <p class="text-sm text-gray-500"><?= htmlspecialchars($citizen['phone']) ?></p>
-          </div>
-        </div>
-
-        <div class="space-y-3 text-sm">
-          <div class="flex items-center gap-3 pb-3 border-b border-gray-100">
-            <i class="ti ti-id-badge text-gray-400"></i>
-            <span class="text-gray-600">NID:</span>
-            <span class="font-medium text-navy ml-auto"><?= htmlspecialchars($citizen['national_id']) ?></span>
-          </div>
-          <div class="flex items-center gap-3 pb-3 border-b border-gray-100">
-            <i class="ti ti-mail text-gray-400"></i>
-            <span class="text-gray-600">Email:</span>
-            <span class="font-medium text-navy ml-auto truncate max-w-[150px]">
-              <?= $citizen['email'] ? htmlspecialchars($citizen['email']) : '<span class=\"text-gray-400 italic\">Not added</span>' ?>
-            </span>
-          </div>
-          <div class="flex items-center gap-3 pb-3 border-b border-gray-100">
-            <i class="ti ti-calendar text-gray-400"></i>
-            <span class="text-gray-600">Member since:</span>
-            <span class="font-medium text-navy ml-auto"><?= date('M Y', strtotime($citizen['created_at'])) ?></span>
-          </div>
-          <div class="flex items-center gap-3">
-            <i class="ti ti-map-pin text-gray-400"></i>
-            <span class="text-gray-600">Location:</span>
-            <span class="font-medium text-navy ml-auto"><?= htmlspecialchars($citizen['district']) ?>, <?= htmlspecialchars($citizen['division']) ?></span>
-          </div>
-        </div>
-
-        <a href="profile.php" class="mt-5 w-full block text-center py-2.5 rounded-xl border border-gray-200 text-gray-600 font-medium text-sm hover:bg-gray-50 transition">
-          Edit Profile
-        </a>
-      </div>
-
-      <!-- Quick Links & Announcements -->
-      <div class="lg:col-span-2 space-y-6">
-        <!-- Quick Actions Grid -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <h2 class="text-navy font-semibold text-lg mb-5 flex items-center gap-2">
-            <i class="ti ti-bolt text-accent"></i> Quick Actions
-          </h2>
-          
-          <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            <a href="new-case.php" class="group p-4 rounded-xl bg-blue-50 hover:bg-blue-100 transition text-center">
-              <div class="w-10 h-10 mx-auto mb-2 rounded-lg bg-blue-500 text-white flex items-center justify-center group-hover:scale-110 transition">
-                <i class="ti ti-file-plus text-lg"></i>
-              </div>
-              <span class="text-sm font-medium text-navy">New Case</span>
-            </a>
-            <a href="cases.php" class="group p-4 rounded-xl bg-green-50 hover:bg-green-100 transition text-center">
-              <div class="w-10 h-10 mx-auto mb-2 rounded-lg bg-green-500 text-white flex items-center justify-center group-hover:scale-110 transition">
-                <i class="ti ti-folder text-lg"></i>
-              </div>
-              <span class="text-sm font-medium text-navy">My Cases</span>
-            </a>
-
-            <a href="support.php" class="group p-4 rounded-xl bg-orange-50 hover:bg-orange-100 transition text-center">
-              <div class="w-10 h-10 mx-auto mb-2 rounded-lg bg-orange-500 text-white flex items-center justify-center group-hover:scale-110 transition">
-                <i class="ti ti-help-circle text-lg"></i>
-              </div>
-              <span class="text-sm font-medium text-navy">Support</span>
-            </a>
-          </div>
-        </div>
-
-      </div>
-    </div>
-
-  </main>
   </div>
 
-  <footer class="py-6 mt-12">
+  <div class="mx-4 mt-5 mb-4 p-3 rounded-xl bg-white/5 border border-white/10 flex items-center gap-3">
+    <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-[#0F6E56] flex items-center justify-center text-white text-sm font-bold shadow">
+      <?php echo htmlspecialchars($initials); ?>
+    </div>
+    <div class="flex-1 min-w-0">
+      <p class="text-white text-xs font-semibold truncate"><?php echo htmlspecialchars($citizenName); ?></p>
+      <p class="text-accent text-[10px] font-medium flex items-center gap-1">
+        <i class="ti ti-user-check"></i> Citizen
+      </p>
+    </div>
+    <div class="w-2 h-2 rounded-full bg-accent flex-shrink-0 pulse-dot"></div>
+  </div>
+
+  <nav class="flex-1 px-3 space-y-1">
+    <p class="text-[10px] font-bold uppercase tracking-widest text-white/30 px-3 pt-2 pb-1">Main</p>
+    <a href="dashboard.php" class="sidebar-link active"><i class="ti ti-layout-dashboard text-base"></i> Dashboard</a>
+    <a href="cases.php" class="sidebar-link"><i class="ti ti-file-description text-base"></i> My Cases</a>
+
+    <p class="text-[10px] font-bold uppercase tracking-widest text-white/30 px-3 pt-4 pb-1">Account</p>
+    <a href="profile.php" class="sidebar-link"><i class="ti ti-user-circle text-base"></i> My Profile</a>
+    <a href="support.php" class="sidebar-link"><i class="ti ti-headset text-base"></i> Support</a>
+  </nav>
+
+  <div class="px-3 pb-5 pt-4 border-t border-white/10 bg-navyDark">
+    <a href="login.php?logout=1" id="btn-logout"
+       class="sidebar-link text-red-400 hover:text-red-300 hover:bg-red-500/10">
+      <i class="ti ti-logout text-base"></i> Sign Out
+    </a>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="flex-1 flex flex-col overflow-auto">
+
+  <!-- Top Bar -->
+  <header class="bg-white border-b border-slate-200 px-6 py-3.5 flex items-center justify-between shadow-sm sticky top-0 z-10">
+    <div class="flex items-center gap-3">
+      <button id="btn-toggle-sidebar" class="text-gray-500 hover:text-navy transition-colors">
+        <i class="ti ti-menu-2 text-xl"></i>
+      </button>
+      <div>
+        <h1 class="text-navy text-base font-bold">Citizen Portal Dashboard</h1>
+        <p class="text-gray-400 text-xs"><i class="ti ti-calendar-event text-xs"></i> <?php echo date('l, d F Y'); ?></p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <button class="relative w-9 h-9 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-gray-500 hover:text-navy transition-all">
+        <i class="ti ti-bell text-base"></i>
+        <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-accent rounded-full pulse-dot"></span>
+      </button>
+      <div class="flex items-center gap-2.5 pl-3 border-l border-slate-200">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-[#0F6E56] flex items-center justify-center text-white text-xs font-bold shadow">
+          <?php echo htmlspecialchars($initials); ?>
+        </div>
+        <div class="hidden sm:block">
+          <p class="text-navy text-xs font-semibold"><?php echo htmlspecialchars($citizenName); ?></p>
+          <p class="text-gray-400 text-[10px]">Citizen Account</p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Page Body -->
+  <div class="flex-1 p-6 space-y-6 animate-fade-in">
+
+    <!-- Welcome Banner -->
+    <div class="bg-gradient-to-r from-navy via-navy2 to-[#1a3060] rounded-2xl p-6 text-white relative overflow-hidden shadow-lg">
+      <div class="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <p class="text-white/60 text-sm font-medium mb-1 flex items-center gap-1.5">
+            <i class="ti ti-circle-check text-accent"></i> Secure Digital Portal
+          </p>
+          <h2 class="text-2xl font-bold">Welcome back, <?php echo htmlspecialchars(explode(' ', $citizenName)[0]); ?>!</h2>
+          <p class="text-white/55 text-sm mt-1">
+            File complaints, upload digital evidence, and track updates on police cases in real time.
+          </p>
+        </div>
+        <div class="flex items-center gap-3">
+          <a href="new-case.php" class="inline-flex items-center gap-2 bg-accent hover:bg-accent-dark text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-all border border-accent">
+            <i class="ti ti-plus"></i> File New Case
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-slide-up">
+      <div class="stat-card bg-white border border-slate-100 shadow-sm">
+        <div class="flex items-start justify-between mb-3">
+          <div class="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center">
+            <i class="ti ti-files text-xl text-blue-600"></i>
+          </div>
+          <span class="badge bg-blue-50 text-blue-600">Total</span>
+        </div>
+        <p class="text-3xl font-bold text-navy counter" data-target="<?php echo $totalCases; ?>"><?php echo $totalCases; ?></p>
+        <p class="text-gray-500 text-sm mt-1 font-medium">Filed Complaints</p>
+      </div>
+
+      <div class="stat-card bg-white border border-slate-100 shadow-sm">
+        <div class="flex items-start justify-between mb-3">
+          <div class="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center">
+            <i class="ti ti-clock-hour-4 text-xl text-amber-600"></i>
+          </div>
+          <span class="badge bg-amber-50 text-amber-600">Active</span>
+        </div>
+        <p class="text-3xl font-bold text-navy counter" data-target="<?php echo $openCases; ?>"><?php echo $openCases; ?></p>
+        <p class="text-gray-500 text-sm mt-1 font-medium">Pending Response</p>
+      </div>
+
+      <div class="stat-card bg-white border border-slate-100 shadow-sm">
+        <div class="flex items-start justify-between mb-3">
+          <div class="w-11 h-11 rounded-xl bg-[#E8F8F3] flex items-center justify-center">
+            <i class="ti ti-circle-check text-xl text-accent"></i>
+          </div>
+          <span class="badge bg-[#E8F8F3] text-accent">Closed</span>
+        </div>
+        <p class="text-3xl font-bold text-navy counter" data-target="<?php echo $resolvedCases; ?>"><?php echo $resolvedCases; ?></p>
+        <p class="text-gray-500 text-sm mt-1 font-medium">Resolved Cases</p>
+      </div>
+
+      <div class="stat-card bg-gradient-to-br from-navy to-navy2 text-white shadow-sm">
+        <div class="flex items-start justify-between mb-3">
+          <div class="w-11 h-11 rounded-xl bg-white/15 flex items-center justify-center">
+            <i class="ti ti-lock-open text-xl text-white"></i>
+          </div>
+          <span class="badge bg-accent/20 text-accent">Secured</span>
+        </div>
+        <p class="text-xl font-bold"><?php echo htmlspecialchars($citizenDistrict ?: 'N/A'); ?></p>
+        <p class="text-white/55 text-sm mt-1 font-medium">Assigned Station</p>
+      </div>
+    </div>
+
+    <!-- Cases Table + Profile -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <!-- Cases Table -->
+      <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h3 class="text-navy font-bold text-sm">Recent Cases</h3>
+            <p class="text-gray-400 text-xs mt-0.5">Your submitted complaint histories</p>
+          </div>
+          <a href="cases.php" class="text-accent text-xs font-semibold hover:underline flex items-center gap-1">
+            View all <i class="ti ti-arrow-right text-xs"></i>
+          </a>
+        </div>
+        <div class="overflow-x-auto">
+          <?php if (empty($recentCases)): ?>
+          <div class="px-6 py-12 text-center">
+            <i class="ti ti-file-off text-5xl text-gray-200 mb-3 block"></i>
+            <p class="text-gray-400 text-sm font-medium">You have not submitted any complaints yet.</p>
+            <a href="new-case.php" class="inline-flex items-center gap-1 text-accent text-xs font-semibold mt-2 hover:underline">
+              <i class="ti ti-plus"></i> File first complaint
+            </a>
+          </div>
+          <?php else: ?>
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-slate-50 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+                <th class="text-left px-6 py-3">Case ID</th>
+                <th class="text-left px-4 py-3">Title</th>
+                <th class="text-left px-4 py-3">Status</th>
+                <th class="text-left px-4 py-3">Date</th>
+                <th class="text-left px-4 py-3">Action</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-50">
+              <?php foreach ($recentCases as $case):
+                $dt = isset($case['created_at']) ? date('d M Y', strtotime($case['created_at'])) : '-';
+              ?>
+              <tr class="hover:bg-slate-50/60 transition-colors">
+                <td class="px-6 py-3.5 font-mono text-xs text-navy font-semibold"><?php echo htmlspecialchars($case['case_number']); ?></td>
+                <td class="px-4 py-3.5 text-gray-600 font-medium"><?php echo htmlspecialchars($case['title']); ?></td>
+                <td class="px-4 py-3.5"><?php echo statusBadge($case['status']); ?></td>
+                <td class="px-4 py-3.5 text-gray-400 text-xs"><?php echo $dt; ?></td>
+                <td class="px-4 py-3.5">
+                  <a href="case-details.php?id=<?php echo htmlspecialchars($case['id']); ?>" class="text-accent hover:text-[#0F6E56] text-xs font-semibold hover:underline">View</a>
+                </td>
+              </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+          <?php endif; ?>
+        </div>
+      </div>
+
+      <!-- Citizen Info + Quick Actions -->
+      <div class="space-y-4">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+          <div class="bg-gradient-to-r from-navy to-navy2 px-5 py-4 flex items-center gap-3">
+            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-accent to-[#0F6E56] flex items-center justify-center text-white font-bold shadow-lg">
+              <?php echo htmlspecialchars($initials); ?>
+            </div>
+            <div>
+              <p class="text-white font-bold text-sm"><?php echo htmlspecialchars($citizenName); ?></p>
+              <p class="text-white/50 text-xs"><i class="ti ti-user-check"></i> Citizen Account</p>
+            </div>
+          </div>
+          <div class="px-5 py-4 space-y-2 text-sm">
+            <?php foreach ([
+              ['ti-phone','Phone',$citizenPhone],
+              ['ti-id-badge','NID',$citizenNID],
+              ['ti-mail','Email',$citizenEmail ?: '-'],
+              ['ti-map-pin','District',$citizenDistrict],
+              ['ti-building','Division',$citizenDivision],
+            ] as [$ico,$lbl,$val]): ?>
+            <div class="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50 transition-colors">
+              <div class="w-8 h-8 rounded-lg bg-[#E8F8F3] flex items-center justify-center flex-shrink-0">
+                <i class="ti <?php echo $ico; ?> text-sm text-accent"></i>
+              </div>
+              <div>
+                <p class="text-gray-400 text-[10px] font-semibold uppercase tracking-wide"><?php echo $lbl; ?></p>
+                <p class="text-navy text-xs font-semibold"><?php echo htmlspecialchars($val ?: '-'); ?></p>
+              </div>
+            </div>
+            <?php endforeach; ?>
+          </div>
+          <div class="px-5 pb-4">
+            <a href="profile.php" class="w-full inline-flex items-center justify-center gap-2 border border-accent text-accent hover:bg-accent hover:text-white px-4 py-2.5 rounded-xl text-xs font-semibold transition-all">
+              <i class="ti ti-user-edit"></i> Edit Profile
+            </a>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+          <h3 class="text-navy font-bold text-sm mb-3">Quick Actions</h3>
+          <div class="space-y-2">
+            <?php foreach ([
+              ['new-case.php','ti-plus','bg-[#E8F8F3] text-accent','File New Case'],
+              ['cases.php','ti-file-search','bg-blue-50 text-blue-600','My Cases'],
+              ['profile.php','ti-user-circle','bg-purple-50 text-purple-600','Update Profile'],
+              ['support.php','ti-headset','bg-amber-50 text-amber-600','Get Support'],
+            ] as [$href,$ico,$cls,$lbl]): ?>
+            <a href="<?php echo $href; ?>" class="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all group">
+              <div class="w-8 h-8 rounded-lg <?php echo $cls; ?> flex items-center justify-center flex-shrink-0">
+                <i class="ti <?php echo $ico; ?> text-sm"></i>
+              </div>
+              <span class="text-navy text-xs font-semibold group-hover:text-accent transition-colors"><?php echo $lbl; ?></span>
+              <i class="ti ti-chevron-right text-xs text-gray-300 ml-auto group-hover:text-accent transition-colors"></i>
+            </a>
+            <?php endforeach; ?>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Security Notice -->
+    <div class="bg-navy/5 border border-navy/10 rounded-xl px-5 py-3 flex items-center gap-3 text-sm text-navy/70">
+      <i class="ti ti-lock text-accent text-base flex-shrink-0"></i>
+      <span>
+        Your session is <strong class="text-accent">securely authenticated</strong>.
+        All actions are logged and audited as per Bangladesh digital policy.
+        <a href="login.php?logout=1" class="text-red-500 font-semibold ml-1 hover:underline">Sign out</a> when done.
+      </span>
+    </div>
+
+  </div><!-- /page body -->
+
+  <footer class="py-6 mt-auto">
     <div class="max-w-7xl mx-auto px-4 text-center">
       <p class="text-xs text-gray-500 font-medium">
         © 2026 CaseFlowX
       </p>
     </div>
   </footer>
+</main>
+
+<script>
+document.getElementById('btn-toggle-sidebar')?.addEventListener('click', function() {
+  const s = document.getElementById('sidebar');
+  s.style.width = s.style.width === '0px' ? '256px' : '0px';
+  s.style.overflow = s.style.width === '0px' ? 'hidden' : '';
+});
+
+// Animate counters
+document.querySelectorAll('.counter').forEach(el => {
+  const target = parseInt(el.dataset.target);
+  if (!target) return;
+  let cur = 0;
+  const step = Math.ceil(target / 20);
+  const t = setInterval(() => {
+    cur = Math.min(cur + step, target);
+    el.textContent = cur;
+    if (cur >= target) clearInterval(t);
+  }, 40);
+});
+</script>
 </body>
 </html>

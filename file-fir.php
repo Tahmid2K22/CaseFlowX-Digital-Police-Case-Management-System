@@ -54,13 +54,18 @@ $officer = require_officer();
   </div>
 
   <div class="max-w-3xl mx-auto">
-    <!-- Breadcrumb -->
-    <div class="mb-5 flex items-center gap-2 text-sm text-gray-500">
-      <a href="dashboard1.php" class="hover:text-accent transition-colors flex items-center gap-1">
-        <i class="ti ti-home text-base"></i> Dashboard
-      </a>
-      <i class="ti ti-chevron-right text-xs"></i>
-      <span class="text-gray-700 font-medium">File FIR</span>
+    <!-- Breadcrumb & Back -->
+    <div class="mb-5 flex items-center justify-between">
+      <div class="flex items-center gap-2 text-sm text-gray-500">
+        <a href="dashboard1.php" class="hover:text-accent transition-colors flex items-center gap-1">
+          <i class="ti ti-home text-base"></i> Dashboard
+        </a>
+        <i class="ti ti-chevron-right text-xs"></i>
+        <span class="text-gray-700 font-medium">File FIR</span>
+      </div>
+      <button onclick="history.back()" class="text-gray-500 hover:text-navy transition-colors flex items-center gap-1 text-xs font-semibold border border-slate-200 px-2.5 py-1 rounded-xl bg-slate-50 hover:bg-slate-100 transition shadow-sm">
+        <i class="ti ti-arrow-left"></i> Back
+      </button>
     </div>
 
     <!-- Card -->

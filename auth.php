@@ -43,6 +43,15 @@ function login($identifier, $password) {
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['username'] = $user['full_name'];
         $_SESSION['role'] = $user['role'];
+        $_SESSION['logged_in'] = true;
+
+        if ($user['role'] === 'Officer') {
+            $_SESSION['officer_id'] = $user['id'];
+            $_SESSION['officer_name'] = $user['full_name'];
+            $_SESSION['officer_role'] = $user['role'];
+        } elseif ($user['role'] === 'Citizen') {
+            $_SESSION['citizen_id'] = $user['id'];
+        }
         
         return ['success' => true];
     }

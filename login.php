@@ -61,16 +61,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $res = login($identifier, $password);
         if ($res['success']) {
+            $_SESSION['logged_in'] = true;
             $role = $_SESSION['role'] ?? '';
             if ($role === 'Admin') {
                 header("Location: admin_users.php");
             } elseif ($role === 'Officer') {
+                $_SESSION['officer_id'] = $_SESSION['user_id'];
+                $_SESSION['officer_name'] = $_SESSION['username'];
+                $_SESSION['officer_role'] = $_SESSION['role'];
                 header("Location: fir_officer_dashboard.php");
             } elseif ($role === 'Investigator') {
                 header("Location: investigator_dashboard.php");
             } elseif ($role === 'Citizen') {
                 $_SESSION['citizen_id'] = $_SESSION['user_id'];
-                $_SESSION['logged_in'] = true;
                 header("Location: dashboard.php");
             } else {
                 header("Location: unauthorized.php");
@@ -176,13 +179,18 @@ $cur = $t[$lang];
     <div class="flex-1 flex items-center justify-center p-4">
         <div class="max-w-md w-full">
             
-            <!-- Breadcrumb -->
-            <div class="mb-5 flex items-center gap-2 text-sm text-gray-500 justify-start">
-                <a href="home.html" class="hover:text-accent transition-colors flex items-center gap-1 font-medium">
-                    <i class="ti ti-home text-base"></i> <?php echo $lang === 'bn' ? 'হোম' : 'Home'; ?>
-                </a>
-                <i class="ti ti-chevron-right text-xs"></i>
-                <span class="text-gray-700 font-semibold"><?php echo $lang === 'bn' ? 'পোর্টাল লগইন' : 'Portal Login'; ?></span>
+            <!-- Breadcrumb & Back -->
+            <div class="mb-5 flex items-center justify-between">
+                <div class="flex items-center gap-2 text-sm text-gray-500 justify-start">
+                    <a href="home.html" class="hover:text-accent transition-colors flex items-center gap-1 font-medium">
+                        <i class="ti ti-home text-base"></i> <?php echo $lang === 'bn' ? 'হোম' : 'Home'; ?>
+                    </a>
+                    <i class="ti ti-chevron-right text-xs"></i>
+                    <span class="text-gray-700 font-semibold"><?php echo $lang === 'bn' ? 'পোর্টাল লগইন' : 'Portal Login'; ?></span>
+                </div>
+                <button onclick="history.back()" class="text-gray-500 hover:text-navy transition-colors flex items-center gap-1 text-xs font-semibold border border-slate-200 px-2.5 py-1 rounded-xl bg-slate-50 hover:bg-slate-100 transition shadow-sm">
+                    <i class="ti ti-arrow-left"></i> <?php echo $lang === 'bn' ? 'ফিরে যান' : 'Back'; ?>
+                </button>
             </div>
 
             <!-- Login Card -->

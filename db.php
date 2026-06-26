@@ -500,6 +500,33 @@ function init_schema(PDO $pdo): void {
     } catch (PDOException $ex) {
         error_log('[CaseFlowX] Backfill migration failed: ' . $ex->getMessage());
     }
+
+    // Sync citizens table from users table (role = 'Citizen') to satisfy live DB foreign key constraints
+    try {
+        $stmtSync = $pdo->query("SELECT * FROM users WHERE role = 'Citizen'");
+        $usersCitizens = $stmtSync->fetchAll();
+        $insertSync = $pdo->prepare("
+            INSERT OR IGNORE INTO citizens (id, full_name, national_id, date_of_birth, gender, phone, email, division, district, address, password_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+        foreach ($usersCitizens as $uc) {
+            $insertSync->execute([
+                $uc['id'],
+                $uc['full_name'],
+                $uc['national_id'],
+                $uc['date_of_birth'],
+                $uc['gender'],
+                $uc['phone'],
+                $uc['email'],
+                $uc['division'],
+                $uc['district'],
+                $uc['address'],
+                $uc['password']
+            ]);
+        }
+    } catch (PDOException $ex) {
+        error_log('[CaseFlowX] Citizen table sync failed: ' . $ex->getMessage());
+    }
 }
 
 function require_citizen(): array {
@@ -518,6 +545,16 @@ function require_citizen(): array {
     $stmt = $db->prepare('SELECT * FROM citizens WHERE id = ? AND status = ?');
     $stmt->execute([$_SESSION['citizen_id'], 'active']);
     $citizen = $stmt->fetch();
+
+    if (!$citizen) {
+        // Fallback: check users table
+        $stmt = $db->prepare("SELECT id, full_name, national_id, date_of_birth, gender, phone, email, division, district, address, status FROM users WHERE id = ? AND role = 'Citizen' AND status = 'Active'");
+        $stmt->execute([$_SESSION['citizen_id']]);
+        $citizen = $stmt->fetch();
+        if ($citizen) {
+            $citizen['password_hash'] = '';
+        }
+    }
 
     if (!$citizen) {
         header('HTTP/1.1 401 Unauthorized');

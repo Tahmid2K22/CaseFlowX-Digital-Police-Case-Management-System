@@ -41,6 +41,7 @@ $totalCases = 0;
 $openCases = 0;
 $resolvedCases = 0;
 $recentCases = [];
+$citizenComplaints = [];
 
 try {
     $checkTable = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='cases'")->fetchColumn();
@@ -49,6 +50,14 @@ try {
         $openCases     = (int) $pdo->query("SELECT COUNT(*) FROM cases WHERE status IN ('open','pending')")->fetchColumn();
         $resolvedCases = (int) $pdo->query("SELECT COUNT(*) FROM cases WHERE status = 'resolved'")->fetchColumn();
         $recentCases   = $pdo->query("SELECT * FROM cases ORDER BY created_at DESC LIMIT 6")->fetchAll();
+        
+        $citizenComplaints = $pdo->query("
+            SELECT c.*, ct.full_name as citizen_name
+            FROM cases c
+            LEFT JOIN citizens ct ON c.citizen_id = ct.id
+            WHERE c.citizen_id IS NOT NULL AND c.officer_id IS NULL AND c.status IN ('open', 'Submitted')
+            ORDER BY c.created_at DESC
+        ")->fetchAll();
     }
 } catch (PDOException $e) {
     error_log('[CaseFlowX] Case query error: ' . $e->getMessage());
@@ -254,6 +263,82 @@ body { font-family:'Inter',sans-serif; background:#F0F4F8; }
       </div>
     </div>
 
+    <!-- Citizen-Submitted Complaints Section (SCRUM-157) -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-6">
+      <div class="bg-amber-50/30 border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-lg bg-amber-500 flex items-center justify-center text-white text-lg">
+            <i class="ti ti-inbox"></i>
+          </div>
+          <div>
+            <h3 class="text-navy font-bold text-sm">Citizen-Submitted Complaints</h3>
+            <p class="text-gray-400 text-xs mt-0.5">New complaints requiring your response & registration</p>
+          </div>
+        </div>
+        <span class="badge bg-amber-100 text-amber-800 font-semibold px-3 py-1 rounded-full text-xs">
+          <?php echo count($citizenComplaints); ?> Pending
+        </span>
+      </div>
+      <div class="overflow-x-auto">
+        <?php if (empty($citizenComplaints)): ?>
+        <div class="px-6 py-12 text-center">
+          <i class="ti ti-inbox-off text-5xl text-gray-200 mb-3 block"></i>
+          <p class="text-gray-400 text-sm font-medium">No pending citizen complaints found.</p>
+        </div>
+        <?php else: ?>
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="bg-slate-50 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+              <th class="text-left px-6 py-3">Case ID</th>
+              <th class="text-left px-4 py-3">Complainant</th>
+              <th class="text-left px-4 py-3">Title & Description</th>
+              <th class="text-left px-4 py-3">Date Submitted</th>
+              <th class="text-left px-4 py-3">Priority</th>
+              <th class="text-left px-4 py-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <?php foreach ($citizenComplaints as $complaint):
+              $priCls = [
+                'low' => 'bg-gray-100 text-gray-700',
+                'medium' => 'bg-orange-100 text-orange-700',
+                'high' => 'bg-red-100 text-red-700'
+              ][$complaint['priority'] ?? 'low'] ?? 'bg-gray-100 text-gray-700';
+              $dt = isset($complaint['created_at']) ? date('d M Y', strtotime($complaint['created_at'])) : '-';
+            ?>
+            <tr id="complaint-row-<?php echo $complaint['id']; ?>" class="hover:bg-slate-50/60 transition-colors">
+              <td class="px-6 py-4 font-mono text-xs text-navy font-semibold">
+                #<?php echo htmlspecialchars($complaint['id']); ?>
+                <div class="text-[10px] text-gray-400 font-normal mt-0.5"><?php echo htmlspecialchars($complaint['case_number']); ?></div>
+              </td>
+              <td class="px-4 py-4">
+                <span class="font-medium text-navy"><?php echo htmlspecialchars($complaint['citizen_name'] ?? $complaint['complainant_name'] ?? 'Citizen'); ?></span>
+                <div class="text-[10px] text-gray-400"><?php echo htmlspecialchars($complaint['complainant_phone'] ?? ''); ?></div>
+              </td>
+              <td class="px-4 py-4 max-w-xs">
+                <div class="font-semibold text-navy text-xs truncate"><?php echo htmlspecialchars($complaint['title']); ?></div>
+                <div class="text-[11px] text-gray-500 line-clamp-2 mt-0.5"><?php echo htmlspecialchars($complaint['description']); ?></div>
+              </td>
+              <td class="px-4 py-4 text-gray-400 text-xs"><?php echo $dt; ?></td>
+              <td class="px-4 py-4"><span class="badge <?php echo $priCls; ?>"><?php echo ucfirst($complaint['priority'] ?? 'low'); ?></span></td>
+              <td class="px-4 py-4">
+                <div class="flex items-center gap-2">
+                  <button onclick="respondComplaint(<?php echo $complaint['id']; ?>, 'accept', this)" class="bg-accent hover:bg-accent-dark text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition shadow-sm">
+                    <i class="ti ti-check"></i> Accept
+                  </button>
+                  <button onclick="openRejectModal(<?php echo $complaint['id']; ?>, '<?php echo htmlspecialchars(addslashes($complaint['title'])); ?>')" class="bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition">
+                    <i class="ti ti-x"></i> Reject
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+        <?php endif; ?>
+      </div>
+    </div>
+
     <!-- Cases Table + Profile -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
@@ -392,6 +477,38 @@ body { font-family:'Inter',sans-serif; background:#F0F4F8; }
   </footer>
 </main>
 
+<!-- Rejection Reason Modal (SCRUM-161) -->
+<div id="reject-modal" class="hidden fixed inset-0 bg-navy/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl animate-fade-in border border-slate-100">
+    <div class="bg-gradient-to-r from-navy to-navy2 px-6 py-4 flex items-center justify-between">
+      <h3 class="text-white font-semibold text-sm flex items-center gap-2">
+        <i class="ti ti-x text-red-400"></i> Reject Complaint
+      </h3>
+      <button onclick="closeRejectModal()" class="text-white/60 hover:text-white transition-colors">
+        <i class="ti ti-x text-lg"></i>
+      </button>
+    </div>
+    <form id="reject-form" onsubmit="submitRejection(event)">
+      <input type="hidden" id="reject-case-id" name="case_id" value="">
+      <div class="p-6 space-y-4">
+        <div>
+          <p class="text-xs text-gray-400 font-semibold uppercase tracking-wider">Complaint</p>
+          <p id="reject-complaint-title" class="text-navy text-xs font-semibold mt-1 truncate"></p>
+        </div>
+        <div>
+          <label for="reject-reason" class="block text-xs font-bold text-gray-500 uppercase mb-2">Reason for Rejection</label>
+          <textarea id="reject-reason" name="reason" rows="4" required placeholder="Please provide a clear reason for rejecting this complaint..." class="w-full rounded-xl border border-slate-200 px-4 py-3 text-xs focus:ring-1 focus:ring-accent focus:border-accent focus:outline-none transition-all placeholder:text-gray-400 resize-none"></textarea>
+        </div>
+        <div id="reject-error" class="hidden text-red-500 text-xs font-semibold p-3 bg-red-50 rounded-xl"></div>
+      </div>
+      <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+        <button type="button" onclick="closeRejectModal()" class="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-gray-500 hover:bg-slate-100 transition-colors">Cancel</button>
+        <button type="submit" id="reject-submit-btn" class="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-red-600/10">Reject Complaint</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
 // Sign Out: direct redirect, no confirmation dialog
 
@@ -413,6 +530,105 @@ document.querySelectorAll('.counter').forEach(el => {
     if (cur >= target) clearInterval(t);
   }, 40);
 });
+
+// Respond & Reject handler logic (SCRUM-160 / SCRUM-161)
+function openRejectModal(caseId, title) {
+  document.getElementById('reject-case-id').value = caseId;
+  document.getElementById('reject-complaint-title').textContent = title;
+  document.getElementById('reject-reason').value = '';
+  document.getElementById('reject-error').classList.add('hidden');
+  document.getElementById('reject-modal').classList.remove('hidden');
+}
+
+function closeRejectModal() {
+  document.getElementById('reject-modal').classList.add('hidden');
+}
+
+async function respondComplaint(caseId, action, btn) {
+  if (btn) {
+    btn.disabled = true;
+    var origHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="ti ti-loader-2 animate-spin"></i> Processing...';
+  }
+  
+  try {
+    const fd = new FormData();
+    fd.append('case_id', caseId);
+    fd.append('action', action);
+    
+    const res = await fetch('api/respond_complaint.php', {
+      method: 'POST',
+      body: fd
+    });
+    const data = await res.json();
+    
+    if (data.success) {
+      const row = document.getElementById('complaint-row-' + caseId);
+      if (row) row.remove();
+      location.reload();
+    } else {
+      alert(data.message || 'An error occurred while responding.');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+  } catch (err) {
+    alert('Network error. Please try again.');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    }
+  }
+}
+
+async function submitRejection(e) {
+  e.preventDefault();
+  const caseId = document.getElementById('reject-case-id').value;
+  const reason = document.getElementById('reject-reason').value.trim();
+  const submitBtn = document.getElementById('reject-submit-btn');
+  const errorEl = document.getElementById('reject-error');
+  
+  if (!reason) {
+    errorEl.textContent = 'Please enter a rejection reason.';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+  
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<i class="ti ti-loader-2 animate-spin"></i> Rejecting...';
+  errorEl.classList.add('hidden');
+  
+  try {
+    const fd = new FormData();
+    fd.append('case_id', caseId);
+    fd.append('action', 'reject');
+    fd.append('reason', reason);
+    
+    const res = await fetch('api/respond_complaint.php', {
+      method: 'POST',
+      body: fd
+    });
+    const data = await res.json();
+    
+    if (data.success) {
+      closeRejectModal();
+      const row = document.getElementById('complaint-row-' + caseId);
+      if (row) row.remove();
+      location.reload();
+    } else {
+      errorEl.textContent = data.message || 'Failed to reject complaint.';
+      errorEl.classList.remove('hidden');
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = 'Reject Complaint';
+    }
+  } catch (err) {
+    errorEl.textContent = 'Network error. Please try again.';
+    errorEl.classList.remove('hidden');
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = 'Reject Complaint';
+  }
+}
 </script>
 </body>
 </html>
