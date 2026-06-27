@@ -116,9 +116,16 @@
         <!-- Submit button -->
         <button type="submit" id="submit-btn"
                 class="w-full bg-accent hover:bg-accent-dark text-white px-6 py-2.5 rounded-xl
-                       text-sm font-semibold flex items-center justify-center gap-2 transition">
+                       text-sm font-semibold flex items-center justify-center gap-2 transition mb-4">
           <i class="ti ti-login text-base"></i> Sign In
         </button>
+
+        <!-- Track status quick link -->
+        <div class="text-center">
+          <a href="track-status.php" class="inline-flex items-center gap-1.5 text-xs text-navy hover:text-accent font-semibold transition">
+            <i class="ti ti-radar text-sm"></i> Track Complaint Status
+          </a>
+        </div>
 
       </form>
 

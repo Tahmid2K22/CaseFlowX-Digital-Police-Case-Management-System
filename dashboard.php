@@ -117,9 +117,26 @@ function priorityBadge(string $priority): string {
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
     <!-- Welcome Section -->
-    <div class="mb-8">
-      <h1 class="text-2xl font-bold text-navy">Welcome back, <?= htmlspecialchars(explode(' ', $citizen['full_name'])[0]) ?>!</h1>
-      <p class="text-gray-500 mt-1">Manage your cases and track their progress from your personal dashboard.</p>
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+      <div>
+        <h1 class="text-2xl font-bold text-navy">Welcome back, <?= htmlspecialchars(explode(' ', $citizen['full_name'])[0]) ?>!</h1>
+        <p class="text-gray-500 mt-1">Manage your cases and track their progress from your personal dashboard.</p>
+      </div>
+      <!-- Quick Case Tracking Form -->
+      <div class="w-full md:w-80 bg-white p-3 rounded-2xl border border-gray-100 shadow-sm">
+        <form action="track-status.php" method="GET" class="flex items-center gap-2">
+          <div class="relative flex-grow">
+            <span class="absolute inset-y-0 left-2.5 flex items-center text-gray-400 pointer-events-none">
+              <i class="ti ti-search text-sm"></i>
+            </span>
+            <input type="text" name="ref" placeholder="Track by Ref (e.g. CF001-2026)" required
+                   class="w-full pl-8 pr-2 py-1.5 rounded-xl border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition uppercase font-semibold">
+          </div>
+          <button type="submit" class="bg-accent hover:bg-accent-dark text-white px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1">
+            Track
+          </button>
+        </form>
+      </div>
     </div>
 
     <!-- Stats Cards -->
